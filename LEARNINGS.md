@@ -31,6 +31,14 @@ Your "user" is a model that only sees the tool **name, description, and input sc
 - **Server `instructions`** are a system-prompt-ish blurb sent once at connect. Use it for cross-tool workflow
  ("call list_decks first").
 
+- **Tool names:** snake_case, verb_noun (`describe_deck`, `add_notes`), consistent across the server. The spec doesn't
+  mandate a case, but hosts prefix names (`mcp__anki__add_notes`) and the model sees tools from many servers, so a name
+  must be clear on its own. The Python SDK takes the name from the function name.
+- **Discovery tools pay off immediately.** `describe_deck`'s first run found things I'd missed by hand: a field the user
+  had just added (`Audio` on the Latin note type), a tag typo (`duoling`), and a template referencing a nonexistent field.
+  A tool that reports *facts about the data* beats hardcoding assumptions in prompts.
+- Fuzzy suggestions: substring matching missed `Spansh`. `difflib.get_close_matches` (stdlib) on the last deck segment fixes it.
+
 ## 3. Gotchas hit
 
 - **MCP Python SDK 2.x (2026) renamed `FastMCP` → `MCPServer`** (`from mcp.server.mcpserver import MCPServer`). Most tutorials, blog posts and LLM training data still show v1. Always check the installed version and read the package source or migration guide. Also, v2 uses snake_case client attributes (`result.is_error`, not `isError`).

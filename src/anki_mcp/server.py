@@ -7,8 +7,10 @@ Design rules (see LEARNINGS.md):
 """
 
 import base64
+import difflib
 import html
 import re
+from collections import Counter
 from typing import Annotated
 
 from mcp.server.mcpserver import MCPServer
@@ -52,6 +54,25 @@ def _decks_for_notes(notes: list[dict]) -> dict[int, str]:
         return {}
     card_to_deck = {c: deck for deck, cards in invoke("getDecks", cards=list(first_card.values())).items() for c in cards}
     return {nid: card_to_deck.get(cid, "?") for nid, cid in first_card.items()}
+
+
+def _deck_term(deck: str, children: bool = False) -> str:
+    """Anki search term for this deck (which includes its subdecks), or with children=True for only its subdecks.
+
+    '_' and '*' are wildcards in Anki search, so the name is escaped.
+    """
+    escaped = re.sub(r'([\\"*_])', r"\\\1", deck)
+    return f'"deck:{escaped}::*"' if children else f'"deck:{escaped}"'
+
+
+def _similar_decks(deck: str, decks) -> list[str]:
+    """Substring matches first ('Golang' -> 'Leetcode::golang'), then typo matches on the last segment ('Spansh' -> Spanish)."""
+    low = deck.lower()
+    hits = sorted(d for d in decks if low in d.lower() or d.lower() in low)
+    leaf = {d.split("::")[-1].lower(): d for d in decks}
+    hits += [leaf[m] for m in difflib.get_close_matches(low.split("::")[-1], leaf, n=5, cutoff=0.6)]
+    hits += difflib.get_close_matches(deck, decks, n=5, cutoff=0.6)
+    return list(dict.fromkeys(hits))[:5]
 
 
 def _yanki_counts() -> dict[str, int]:
@@ -171,7 +192,7 @@ def get_weak_cards(
     """
     query = "prop:lapses>0 -is:suspended"
     if deck:
-        query = f'"deck:{deck}" {query}'
+        query = f"{_deck_term(deck)} {query}"
     card_ids = invoke("findCards", query=query)[:3000]
     if not card_ids:
         return []
@@ -189,6 +210,95 @@ def get_weak_cards(
         }
         for c in cards[:limit]
     ]
+
+
+_SOUND_RE = re.compile(r"\[sound:([^\]]+)\]")
+_CATEGORICAL_MAX = 15  # a field with at most this many distinct short values is treated as a code list
+
+
+def _audio_source(filename: str) -> str:
+    """Guess which tool made an audio file from its name: hypertts-…, google-…, anki-mcp-…"""
+    if filename.startswith("anki-mcp-"):
+        return "anki-mcp"
+    head = re.split(r"[-_]", filename, maxsplit=1)[0]
+    return head if head != filename and head.isalpha() else "other"
+
+
+def _field_stats(values: list[str]) -> dict:
+    stats: dict = {"fill_rate": round(sum(bool(v.strip()) for v in values) / len(values), 2)}
+    sounds = [s for v in values for s in _SOUND_RE.findall(v)]
+    texts = [_plain(_SOUND_RE.sub("", v), None) for v in values]
+    texts = [t for t in texts if t]
+    if sounds:
+        stats["audio"] = {
+            "notes_with_audio": sum(bool(_SOUND_RE.search(v)) for v in values),
+            "sources": dict(Counter(_audio_source(s) for s in sounds).most_common(3)),
+            "shares_field_with_text": bool(texts),
+        }
+    if texts:
+        stats["avg_chars"] = round(sum(map(len, texts)) / len(texts))
+        counts = Counter(texts)
+        if len(texts) >= 5 and len(counts) <= _CATEGORICAL_MAX and stats["avg_chars"] <= 15:
+            stats["values"] = dict(counts.most_common())
+        else:
+            stats["example"] = texts[-1][:80]
+    return stats
+
+
+@mcp.tool(annotations=READ_ONLY)
+def describe_deck(
+    deck: Annotated[str, Field(description="Exact deck name from list_decks.")],
+    sample_size: Annotated[int, Field(ge=20, le=2000, description="Most recent notes to analyze.")] = 500,
+) -> dict:
+    """Work out a deck's format from its existing notes, so new notes can match it. Call before adding notes to a
+    deck you haven't described yet in this conversation.
+
+    Reports, per note type: fields in order with fill rate, which field holds audio ([sound:...]) and which tool made it,
+    the allowed values of short code fields (e.g. WordType, Gender), and which fields each card template shows on the
+    front/back. Also: tag patterns, subdecks, source (anki/yanki/mixed) and a few recent sample notes.
+    Only notes directly in this deck are analyzed, not subdecks.
+    """
+    decks = set(invoke("deckNames"))
+    if deck not in decks:
+        raise AnkiError(f"Deck '{deck}' does not exist. Similar: {_similar_decks(deck, decks) or 'none'}. Use list_decks.")
+    subdecks = sorted(d for d in decks if d.startswith(deck + "::"))
+    own_ids = invoke("findNotes", query=f"{_deck_term(deck)} -{_deck_term(deck, children=True)}")
+    own_cards = _own_card_counts([deck]).get(deck, 0)
+    result: dict = {
+        "deck": deck,
+        "source": _source(deck, own_cards, _yanki_counts()),
+        "notes": len(own_ids),
+        "subdecks": subdecks[:30],
+    }
+    if not own_ids:
+        result["hint"] = "No notes directly in this deck. Describe one of its subdecks instead." if subdecks else "Empty deck."
+        return result
+
+    analyzed = sorted(own_ids)[-sample_size:]  # note ids are creation timestamps: keep the most recent
+    notes = invoke("notesInfo", notes=analyzed)
+    result["analyzed_notes"] = len(notes)
+
+    by_type: dict[str, list[dict]] = {}
+    for n in notes:
+        by_type.setdefault(n["modelName"], []).append(n)
+    result["note_types"] = []
+    for name, group in sorted(by_type.items(), key=lambda kv: -len(kv[1])):
+        order = sorted(group[0]["fields"], key=lambda f: group[0]["fields"][f]["order"])
+        templates = invoke("modelFieldsOnTemplates", modelName=name)
+        result["note_types"].append(
+            {
+                "note_type": name,
+                "notes": len(group),
+                "fields": {f: _field_stats([n["fields"][f]["value"] for n in group]) for f in order},
+                "templates": {t: {"front": sides[0], "back": sides[1]} for t, sides in templates.items()},
+            }
+        )
+
+    tags = Counter(t for n in notes for t in n["tags"])
+    patterns = Counter("::".join(t.split("::")[:-1]) + "::*" for t in tags.elements() if "::" in t)
+    result["tags"] = {"most_common": dict(tags.most_common(8)), "hierarchies": dict(patterns.most_common(5))}
+    result["samples"] = [{"note_type": n["modelName"], "fields": _fields(n, 80), "tags": n["tags"]} for n in notes[-3:]]
+    return result
 
 
 class NoteInput(BaseModel):
@@ -264,7 +374,7 @@ def add_notes(
 
     for i, note in enumerate(notes):
         if note.deck not in decks:
-            near = [d for d in decks if note.deck.lower() in d.lower() or d.lower() in note.deck.lower()][:5]
+            near = _similar_decks(note.deck, decks)
             results[i] = {"index": i, "status": "error", "error": f"Deck '{note.deck}' does not exist. Similar: {near or 'none'}. Use list_decks."}
             continue
         if _source(note.deck, own.get(note.deck, 0), yanki) == "yanki":

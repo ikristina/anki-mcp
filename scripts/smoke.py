@@ -30,7 +30,7 @@ async def main():
     async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
         await s.initialize()
         names = {t.name for t in (await s.list_tools()).tools}
-        expected = {"list_decks", "search_notes", "get_notes", "get_weak_cards", "add_notes"}
+        expected = {"list_decks", "describe_deck", "search_notes", "get_notes", "get_weak_cards", "add_notes"}
         check("all tools registered", names == expected, ", ".join(sorted(names)))
 
         decks = items(await s.call_tool("list_decks", {}))
@@ -38,6 +38,15 @@ async def main():
         check("list_decks returns every deck", len(decks) > 1, f"{len(decks)} decks")
         check("Yanki deck labeled", by_name.get("Go", {}).get("source") == "yanki", "Go")
         check("native deck labeled", by_name.get("Languages::🇪🇸 Spanish", {}).get("source") == "anki", "Spanish")
+
+        desc = items(await s.call_tool("describe_deck", {"deck": "Languages::🇪🇸 Spanish", "sample_size": 100}))[0]
+        spanish_type = next((nt for nt in desc.get("note_types", []) if nt["note_type"] == "Spanish"), {})
+        fields = spanish_type.get("fields", {})
+        check("describe_deck finds the audio field", "audio" in fields.get("Audio", {}), str(fields.get("Audio", {}).get("audio")))
+        check("describe_deck lists code values", "N" in fields.get("WordType", {}).get("values", {}), str(fields.get("WordType", {}).get("values")))
+        check("describe_deck reads templates", "Read" in spanish_type.get("templates", {}), ", ".join(spanish_type.get("templates", {})))
+        typo = await s.call_tool("describe_deck", {"deck": "Spansh"})
+        check("describe_deck suggests on typo", typo.is_error and "Spanish" in typo.content[0].text)
 
         page = items(await s.call_tool("search_notes", {"query": "deck:Go", "limit": 3}))[0]
         check("search_notes paginates", page["returned"] == 3 and page["total"] >= 3, f"{page['returned']} of {page['total']}")

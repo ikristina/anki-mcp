@@ -6,6 +6,7 @@ An MCP server that gives agents (Claude Code, Claude Desktop, …) access to you
 | Tool | What it does |
 |---|---|
 | `list_decks` | Decks with counts and `source` (`anki` / `yanki` = synced from Obsidian / `mixed`) |
+| `describe_deck` | Works out a deck's format: note types, fields, audio field and its source, code values (e.g. WordType), templates, tag patterns, samples |
 | `search_notes` | Anki search syntax, paginated compact previews |
 | `get_notes` | Full content for specific note ids |
 | `get_weak_cards` | Most-forgotten cards (lapses, then ease), optionally per deck |

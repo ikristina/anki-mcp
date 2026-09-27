@@ -19,7 +19,7 @@ Run the smoke test after every change to `src/`. There are no unit tests yet.
 
 ## Layout
 
-- `src/anki_mcp/server.py`: the MCP tools (`list_decks`, `search_notes`, `get_notes`, `get_weak_cards`, `add_notes`)
+- `src/anki_mcp/server.py`: the MCP tools (`list_decks`, `describe_deck`, `search_notes`, `get_notes`, `get_weak_cards`, `add_notes`)
 - `src/anki_mcp/client.py`: AnkiConnect HTTP client and `AnkiError`
 - `src/anki_mcp/tts.py`: free TTS engines selected by voice string: `es-MX` (Google/gTTS), `espeak:la`, `macos:Alice`
 - `scripts/smoke.py`: stdio client that asserts on real tool results
