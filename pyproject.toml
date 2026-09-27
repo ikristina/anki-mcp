@@ -3,6 +3,8 @@ name = "anki-mcp"
 version = "0.1.0"
 description = "MCP server that lets agents search, analyze, and add Anki notes via AnkiConnect"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = ["mcp>=2.2,<3", "gtts>=2.5"]
 
 [project.scripts]

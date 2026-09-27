@@ -31,3 +31,4 @@ htmlcov/
 .AppleDouble
 .LSOverride
 Thumbs.db
+.DS_Store

@@ -7,14 +7,12 @@ Anything under "Gotchas hit" happened in this repo.
 
 ## 1. Mental model
 
-- **An MCP server is a normal program that exposes functions.** The *host* (Claude Code, Claude Desktop, Cursor…)
-  runs the model and decides when to call your functions. Your server has no LLM, no API key, and no token cost.
+- **An MCP server is a normal program that exposes functions.** The *host* (Claude Code, Claude Desktop, Cursor…) runs the model and decides when to call your functions. Your server has no LLM, no API key, and no token cost.
 - Three kinds of things a server can expose:
   - **Tools** are actions the *model* chooses to call (`search_notes`, `add_notes`). Most servers only need these.
   - **Resources** are data the *user/host* attaches as context (like `@`-mentioning a file). They are read-only.
   - **Prompts** are reusable templates the *user* picks (these show up as slash commands in Claude Code).
-- **Transports:** `stdio` (host launches your process and talks over stdin/stdout, which suits local tools) vs.
-  `streamable HTTP` (for remote or shared servers, which also need auth). Start with stdio.
+- **Transports:** `stdio` (host launches your process and talks over stdin/stdout, which suits local tools) vs. `streamable HTTP` (for remote or shared servers, which also need auth). Start with stdio.
 - **stdout belongs to the protocol.** A `print()` in a stdio server corrupts the JSON-RPC stream. Log to stderr.
 
 ## 2. Tool design is the actual skill
@@ -110,6 +108,18 @@ Your "user" is a model that only sees the tool **name, description, and input sc
 - Eval case = prompt + expected tool(s) + checks on arguments/result. Example: "add a card about Go channels to my Go deck"
   should call `add_notes` with deck=`Go`, and should not call `add_notes` 3 times with 1 note each.
 - Change one description and re-run. If the score moves, you are doing tool design with evidence rather than guessing.
+
+## 6b. Distribution: making it work for any agent
+
+- **The server is already portable.** MCP is a standard, so Claude Desktop, Cursor, VS Code/Copilot, Codex and Gemini CLI can all run
+  it. The work is in making it *easy to install*, not in porting it.
+- `uvx --from git+https://github.com/<user>/<repo> <script>` installs and runs straight from GitHub, with no clone or venv.
+  It relies on `[project.scripts]` in `pyproject.toml`. Next step: publish to PyPI so it's just `uvx anki-mcp`.
+- Config formats differ slightly: most clients use `{"mcpServers": {...}}`, VS Code uses `{"servers": {...}}`, and Codex uses TOML.
+- **AGENTS.md** is the cross-agent instruction file (Codex, Cursor, Copilot, …). Claude Code reads CLAUDE.md, which can
+  import it with `@AGENTS.md`, so there's one source of truth for all agents.
+- Skills (SKILL.md) are less portable than servers. Put *capabilities* in the server and *personal policy* in the skill,
+  so other people get the useful part.
 
 ## 7. Glossary
 

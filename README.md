@@ -58,6 +58,60 @@ Then start a new Claude Code session and run `/mcp`: `anki` should show as conne
 `--scope user` makes the tools available in every project. The skills only load when Claude Code runs inside this folder,
 unless you copy `.claude/skills/*` to `~/.claude/skills/`.
 
+### Other agents (Claude Desktop, Cursor, VS Code, Codex, Gemini CLI, …)
+
+MCP is agent-agnostic, so any MCP client can run this server. No clone is needed: `uvx` builds it straight from GitHub.
+Steps 1–2 (Anki + AnkiConnect, eSpeak) still apply.
+
+The command every client runs:
+
+```bash
+uvx --from git+https://github.com/ikristina/anki-mcp anki-mcp
+```
+
+GUI apps often don't inherit your shell's `PATH`. If the server fails to start, replace `uvx` with its absolute path
+(`which uvx`, e.g. `/Users/you/.local/bin/uvx`).
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`), **Cursor** (`~/.cursor/mcp.json`),
+**Windsurf**, **Gemini CLI** (`~/.gemini/settings.json`), and most other clients use the `mcpServers` format:
+
+```json
+{
+  "mcpServers": {
+    "anki": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/ikristina/anki-mcp", "anki-mcp"]
+    }
+  }
+}
+```
+
+**VS Code / GitHub Copilot** (`.vscode/mcp.json`) uses `servers`:
+
+```json
+{
+  "servers": {
+    "anki": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/ikristina/anki-mcp", "anki-mcp"]
+    }
+  }
+}
+```
+
+**OpenAI Codex CLI** (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.anki]
+command = "uvx"
+args = ["--from", "git+https://github.com/ikristina/anki-mcp", "anki-mcp"]
+```
+
+The tools work the same everywhere. The **skills** (`.claude/skills/`) are Claude Code's format; with other agents, copy
+the relevant `SKILL.md` body into that agent's rules/instructions file. The skills also encode *my* deck names and
+note types, so adapt the tables to your collection.
+
 ### Optional
 
 - `ANKI_CONNECT_URL`, if AnkiConnect isn't on `http://127.0.0.1:8765`
