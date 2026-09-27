@@ -18,7 +18,7 @@ from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 
 from anki_mcp.client import AnkiError, invoke
-from anki_mcp.tts import synthesize
+from anki_mcp.tts import synthesize, validate_voice
 
 mcp = MCPServer(
     "anki",
@@ -399,6 +399,12 @@ def add_notes(
         if unknown:
             results[i] = {"index": i, "status": "error", "error": f"Unknown fields {sorted(unknown)} for '{note.note_type}'. Valid fields: {expected}."}
             continue
+        if note.audio:
+            try:
+                validate_voice(note.audio.voice)
+            except AnkiError as e:
+                results[i] = {"index": i, "status": "error", "error": str(e)}
+                continue
         if note.audio and note.audio.field not in expected:
             results[i] = {"index": i, "status": "error", "error": f"Audio field '{note.audio.field}' not in '{note.note_type}'. Valid fields: {expected}."}
             continue
@@ -437,6 +443,78 @@ def add_notes(
 
     summary = {s: sum(r["status"] == s for r in results) for s in ("added", "valid", "error")}
     return {"dry_run": dry_run, "summary": summary, "results": results}
+
+
+@mcp.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=True, open_world_hint=True))
+def add_audio(
+    query: Annotated[str, Field(description="Anki search for the notes to voice, e.g. '\"deck:Languages::Latin\"'.")],
+    text_field: Annotated[str, Field(description="Field whose text is spoken, e.g. 'Front' (Latin) or 'Word' (Spanish/French).")],
+    audio_field: Annotated[str, Field(description="Field that receives the [sound:...] tag, e.g. 'Audio' or 'Sound'.")],
+    voice: Annotated[
+        str,
+        Field(
+            description="Latin: 'espeak:la' (Google's 'la' is NOT Latin and is rejected). Spanish: 'es-MX'. French: 'fr'. "
+            "Other: Google 'de', 'pt-BR', …, or offline 'espeak:<lang>' / 'macos:<Voice>'."
+        ),
+    ],
+    limit: Annotated[int, Field(ge=1, le=50, description="Max notes to voice in this call; call again for the rest.")] = 20,
+    dry_run: Annotated[bool, Field(description="Default True: report what would change. Set False to write.")] = True,
+) -> dict:
+    """Add pronunciation audio to EXISTING notes that don't have it yet (use add_notes' `audio` option for new notes).
+
+    Skips notes whose audio_field already holds a [sound:...] tag, so it is safe to re-run until 'remaining' is 0.
+    Only fills one field per note (no schema change, no full sync, review history untouched). Yanki notes are skipped.
+    Workflow: dry run → voice ~5 notes and let the user listen in Anki → continue in batches.
+    """
+    validate_voice(voice)
+    ids = invoke("findNotes", query=query)
+    notes = invoke("notesInfo", notes=ids) if ids else []
+    counts = Counter()
+    missing_fields: dict[str, list[str]] = {}
+    todo: list[tuple[dict, str]] = []
+    for n in notes:
+        fields = n["fields"]
+        if n["modelName"].startswith("Yanki"):
+            counts["skipped_yanki"] += 1
+        elif text_field not in fields or audio_field not in fields:
+            counts[f"skipped_missing_field ({n['modelName']})"] += 1
+            missing_fields.setdefault(n["modelName"], list(fields))
+        elif _SOUND_RE.search(fields[audio_field]["value"]):
+            counts["already_has_audio"] += 1
+        elif not (text := _plain(_SOUND_RE.sub("", fields[text_field]["value"]), None)):
+            counts["skipped_empty_text"] += 1
+        else:
+            if _SOUND_RE.search(fields[text_field]["value"]):
+                counts["warning_text_field_also_has_sound"] += 1
+            todo.append((n, text))
+
+    batch = todo[:limit]
+    result: dict = {"matched": len(notes), **counts, "eligible": len(todo), "dry_run": dry_run}
+    if not notes:
+        result["hint"] = "No notes match the query. Check the deck name with list_decks (quote names with spaces)."
+        return result
+    if missing_fields:
+        result["available_fields"] = missing_fields
+    if dry_run:
+        result["would_voice"] = [{"note_id": n["noteId"], "text": t[:80]} for n, t in batch]
+        result["remaining_after"] = len(todo) - len(batch)
+        return result
+
+    done, failed = [], []
+    for n, text in batch:
+        try:
+            filename, data = synthesize(text, voice)
+            invoke("storeMediaFile", filename=filename, data=base64.b64encode(data).decode())
+            current = n["fields"][audio_field]["value"]
+            invoke("updateNoteFields", note={"id": n["noteId"], "fields": {audio_field: f"{current}[sound:{filename}]"}})
+            done.append({"note_id": n["noteId"], "text": text[:80]})
+        except AnkiError as e:
+            failed.append({"note_id": n["noteId"], "text": text[:80], "error": str(e)})
+            if "not installed" in str(e) or "Unknown TTS" in str(e) or "no real" in str(e):
+                break  # the voice itself is unusable; don't repeat the same error for every note
+    result.update(voiced=done, failed=failed, remaining=len(todo) - len(done))
+    result["note"] = "If a note is open in Anki's browser/editor, reopen it to see the change."
+    return result
 
 
 def main():

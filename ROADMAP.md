@@ -66,7 +66,7 @@ Two different operations with very different risk:
 4. The user then syncs from **desktop** and chooses **Upload to AnkiWeb**. Other devices download once.
 5. Log what was converted (note ids, mapping, backup path) in `~/.config/anki-mcp/history/` for recovery.
 
-Converting existing notes also enables **audio backfill**, e.g. adding `espeak:la` audio to the 233 Latin notes.
+**Done:** audio backfill for existing notes (`add_audio`). Converting existing notes also enables **audio backfill**, e.g. adding `espeak:la` audio to the 233 Latin notes.
 That's a regular field update, so no full sync is needed.
 
 ## Phase 4: Remote MCP (Streamable HTTP + auth), still on AnkiConnect

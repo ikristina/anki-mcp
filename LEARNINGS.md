@@ -39,6 +39,15 @@ Your "user" is a model that only sees the tool **name, description, and input sc
   A tool that reports *facts about the data* beats hardcoding assumptions in prompts.
 - Fuzzy suggestions: substring matching missed `Spansh`. `difflib.get_close_matches` (stdlib) on the last deck segment fixes it.
 
+- **A capability hidden inside another tool's option is invisible.** Audio existed only as `add_notes(audio=…)`. Asked to
+  "add audio to my Latin cards", another session saw no fitting tool and offered to write a script with Google's Latin voice
+  (the one we'd rejected). The fix is a dedicated `add_audio` tool whose *description* carries the lesson ("Latin: espeak:la;
+  Google 'la' is not Latin"). Knowledge that lives only in LEARNINGS.md or a skill doesn't reach sessions that don't load them.
+- **Dry runs must validate everything that can fail**, not just the data. Voice validation originally ran only while
+  generating audio, so a dry run approved Google `la`. Now `validate_voice` runs up front.
+- Skills installed globally as **symlinks** (`~/.claude/skills/x -> repo/.claude/skills/x`): available in every project,
+  one source of truth, updated by `git pull`.
+
 ## 3. Gotchas hit
 
 - **MCP Python SDK 2.x (2026) renamed `FastMCP` → `MCPServer`** (`from mcp.server.mcpserver import MCPServer`). Most tutorials, blog posts and LLM training data still show v1. Always check the installed version and read the package source or migration guide. Also, v2 uses snake_case client attributes (`result.is_error`, not `isError`).

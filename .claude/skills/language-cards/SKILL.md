@@ -3,7 +3,7 @@ name: language-cards
 description: Add new foreign-language words or expressions to the user's Anki language decks, with pronunciation audio. Use when the user wants to add, save or learn vocabulary, a phrase or an expression in Spanish, French, Latin, Norwegian or another language, or pastes a list of words to turn into cards. Invocable as /language-cards <words...>.
 model: haiku
 effort: low
-allowed-tools: mcp__anki__list_decks, mcp__anki__search_notes, mcp__anki__add_notes
+allowed-tools: mcp__anki__list_decks, mcp__anki__describe_deck, mcp__anki__search_notes, mcp__anki__add_notes, mcp__anki__add_audio
 ---
 
 # Language cards with audio
@@ -45,7 +45,13 @@ and fields, then confirm the mapping with the user before adding.
    Audio is spoken from `Word`; set `audio.text` only if the spoken text should differ (e.g. drop the parenthetical `(fam.)`).
 5. Report which notes were added and any that failed. An audio failure means the note was *not* added, so offer to retry.
 
-## 3. Notes
+## 3. Adding audio to existing notes
+
+Use `mcp__anki__add_audio` (not add_notes) with the deck's text field, audio field and voice from the table in section 1.
+Dry run first (the default), then `dry_run: false` in batches of up to 50 until `remaining` is 0. On a first run for a deck,
+voice ~5 notes and let the user listen before doing the rest.
+
+## 4. Notes
 
 - Audio is free: Google Translate voices via gTTS, the same service the user's HyperTTS presets use. It needs internet.
 - Norwegian voice code is `no` (not `nb`).

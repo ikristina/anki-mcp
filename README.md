@@ -10,6 +10,7 @@ An MCP server that gives agents (Claude Code, Claude Desktop, …) access to you
 | `search_notes` | Anki search syntax, paginated compact previews |
 | `get_notes` | Full content for specific note ids |
 | `get_weak_cards` | Most-forgotten cards (lapses, then ease), optionally per deck |
+| `add_audio` | Adds pronunciation audio to *existing* notes that lack it; dry run by default, batches of ≤50, skips notes that already have audio |
 | `add_notes` | Batch add with validation, `dry_run`, duplicate check, auto-tag `mcp-added`, optional free TTS audio; refuses Yanki-owned decks |
 
 Skills in `.claude/skills/`:

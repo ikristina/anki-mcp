@@ -28,6 +28,24 @@ _REGION_TLD = {
 _GOOGLE_FAKE = {"la"}
 
 
+def validate_voice(voice: str) -> None:
+    """Cheap check (no audio generated) so dry runs reject voices that would fail or produce wrong audio."""
+    engine, _, name = voice.partition(":") if ":" in voice else ("google", "", voice)
+    if engine == "google":
+        lang = name.partition("-")[0].lower()
+        if lang in _GOOGLE_FAKE or lang not in tts_langs():
+            raise AnkiError(f"Google has no real '{lang}' voice. For Latin use 'espeak:la' or 'macos:Alice'.")
+    elif engine == "espeak":
+        _require("espeak-ng", "Install it with `brew install espeak-ng`.")
+        listing = subprocess.run(["espeak-ng", f"--voices={name}"], capture_output=True, text=True).stdout
+        if len(listing.strip().splitlines()) < 2:
+            raise AnkiError(f"eSpeak has no '{name}' voice. List them with `espeak-ng --voices`.")
+    elif engine == "macos":
+        _check_macos_voice(name)
+    else:
+        raise AnkiError(f"Unknown TTS engine '{engine}'. Use 'es-MX' (Google), 'espeak:la' or 'macos:Alice'.")
+
+
 def synthesize(text: str, voice: str) -> tuple[str, bytes]:
     """Return (filename, audio bytes) for text spoken by voice. Raises AnkiError with a fix-it message."""
     engine, _, name = voice.partition(":") if ":" in voice else ("google", "", voice)
@@ -79,6 +97,14 @@ def _espeak_wav(text: str, lang: str) -> bytes:
 
 
 def _say_aiff(text: str, voice: str) -> bytes:
+    _check_macos_voice(voice)
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "out.aiff"
+        subprocess.run(["say", "-v", voice, "-r", "150", "-o", str(out), text], capture_output=True, check=True)
+        return out.read_bytes()
+
+
+def _check_macos_voice(voice: str) -> None:
     _require("say", "The macOS voices are only available on a Mac.")
     # `say` silently falls back to the default voice for unknown names, so check explicitly.
     listing = subprocess.run(["say", "-v", "?"], capture_output=True, text=True, check=True).stdout
@@ -86,10 +112,6 @@ def _say_aiff(text: str, voice: str) -> bytes:
     if voice not in names:
         near = sorted(n for n in names if voice.lower() in n.lower())[:5]
         raise AnkiError(f"macOS voice '{voice}' not found. Similar: {near or 'none'}. Italian voices include 'Alice'.")
-    with tempfile.TemporaryDirectory() as tmp:
-        out = Path(tmp) / "out.aiff"
-        subprocess.run(["say", "-v", voice, "-r", "150", "-o", str(out), text], capture_output=True, check=True)
-        return out.read_bytes()
 
 
 def _to_m4a(audio: bytes, suffix: str) -> bytes:

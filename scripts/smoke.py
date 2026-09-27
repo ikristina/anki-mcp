@@ -30,7 +30,7 @@ async def main():
     async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
         await s.initialize()
         names = {t.name for t in (await s.list_tools()).tools}
-        expected = {"list_decks", "describe_deck", "search_notes", "get_notes", "get_weak_cards", "add_notes"}
+        expected = {"list_decks", "describe_deck", "search_notes", "get_notes", "get_weak_cards", "add_notes", "add_audio"}
         check("all tools registered", names == expected, ", ".join(sorted(names)))
 
         decks = items(await s.call_tool("list_decks", {}))
@@ -69,6 +69,12 @@ async def main():
         for (label, want, _), r in zip(cases, res):
             got = r["status"] if want == "valid" else r.get("error", "")
             check(f"add_notes: {label}", want in got, got[:90])
+
+        latin = {"query": '"deck:Languages::Latin"', "text_field": "Front", "audio_field": "Audio", "limit": 3}
+        plan = items(await s.call_tool("add_audio", {**latin, "voice": "espeak:la"}))[0]
+        check("add_audio dry run plans a batch", plan["dry_run"] and len(plan["would_voice"]) <= 3, f"eligible {plan['eligible']}")
+        fake = await s.call_tool("add_audio", {**latin, "voice": "la"})
+        check("add_audio rejects Google 'la' even in dry run", fake.is_error and "espeak:la" in fake.content[0].text)
 
         bad = await s.call_tool("search_notes", {"query": "deck:Go", "limit": 500})
         check("schema rejects limit=500 with a readable error", bad.is_error and "less than or equal to 100" in bad.content[0].text)
