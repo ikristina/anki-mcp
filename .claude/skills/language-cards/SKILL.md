@@ -16,7 +16,7 @@ Arguments (if invoked as a command): `$ARGUMENTS`. These are the words or expres
 |---|---|---|---|---|
 | Spanish | `Languages::🇪🇸 Spanish` | `Spanish` | `Audio` | `es-MX` |
 | French | `Languages::🇫🇷 French` | `French` | `Sound` | `fr` |
-| Latin | `Languages::Latin` | `Basic (and reversed card)` (Front = Latin, Back = English) | `Front` (no separate audio field; the sound tag goes next to the text) | `espeak:la` (user's choice; never Google `la`, which sounds like English) |
+| Latin | `Languages::Latin` | `Basic (and reversed card)` (Front = Latin, Back = English) | `Audio` (templates play it with the Latin side; never put the sound tag in `Front` too, or it plays twice) | `espeak:la` (user's choice; never Google `la`, which sounds like English) |
 
 Latin: tag `latin`, plus `duolingo` if the sentence comes from Duolingo (as existing notes do). Set `audio.text` to the Latin
 text itself, so the speech is never generated from HTML.
