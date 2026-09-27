@@ -1,68 +1,112 @@
-# Roadmap: Headless On-The-Go Anki Sync (Desktop-Free)
+# Roadmap
 
-## 1. Problem Statement
-The current anki-mcp implementation relies on [AnkiConnect](https://ankiweb.net/shared/info/2055492159), which requires the local Anki Desktop GUI application running on `localhost:8765`. 
+Each phase is useful on its own and ships separately. Order goes from low risk to high risk: nothing that can damage
+the collection comes before backups and a verified sync path.
 
-When away from a home desktop (or without owning a dedicated desktop server), users cannot:
-1. Add vocabulary cards on the go via mobile Claude or remote agents.
-2. Generate and attach pronunciation audio headlessly.
-3. Automatically sync cards to AnkiWeb without manual `.apkg` file export/import steps.
+Guiding rules for every phase:
+- **The collection is irreplaceable.** Writes are dry-run first; destructive or schema-changing operations need a backup
+  and an explicit user confirmation.
+- **Capabilities in the server, personal policy in skills/profiles**, so the server stays useful to other people.
+- Every new tool gets smoke-test checks, and every new workflow gets eval cases (Phase 7).
 
-## 2. Target Architecture
+---
 
-```
-[ Mobile Claude / Agent ]
-           │
-           ▼  (MCP over stdio or Streamable HTTP/SSE)
-┌────────────────────────────────────────────────────────┐
-│                     anki-mcp Server                    │
-│                                                        │
-│  1. Audio Synthesis: gTTS -> MP3 (headless)            │
-│  2. Media Registration: fastanki.add_media()           │
-│  3. Card Creation: fastanki.add_card() + [sound:...]   │
-│  4. Cloud Sync: fastanki.sync()                        │
-└────────────────────────────────────────────────────────┘
-           │
-           ▼  (AnkiWeb Native Sync Protocol)
-┌────────────────────────────────────────────────────────┐
-│                        AnkiWeb                         │
-└────────────────────────────────────────────────────────┘
-           │
-           ▼  (Normal Anki Mobile Sync)
-[ AnkiMobile (iOS) / AnkiDroid (Android) ]
-```
+## Phase 1: Deck discovery (`describe_deck`)
 
-### Core Technologies
-- **Sync Engine:** [`fastanki`](https://github.com/AnswerDotAI/fastanki) (AnswerDotAI): communicates directly with the native AnkiWeb sync protocol in pure Python, bypassing Anki Desktop, Qt, and Xvfb entirely.
-- **Audio Engine:** [`gTTS`](src/anki_mcp/tts.py): headless text-to-speech generating MP3 files.
-- **Protocol:** Model Context Protocol (MCP) Python SDK with dual transport support:
-  - `stdio` for local execution (e.g. mobile Termux or cloud VM sessions).
-  - `Streamable HTTP / SSE` for remote deployment accessible to mobile/web agents.
+**Problem:** the skills hardcode my decks, note types, field names and voices. Nobody else can use them, and they go
+stale when my collection changes.
 
-## 3. Implementation Plan
+**Tool:** `describe_deck(deck)` works out the format from the data (read-only):
+- note types used, with counts; field names in order
+- per field: fill rate, typical length, whether it holds `[sound:…]` (i.e. it's an audio field), and the audio source
+  (`hypertts-*`, `anki-mcp-*`, …)
+- short categorical fields (e.g. `WordType`, `Gender`): top values, so new notes use the same codes
+- tag patterns (e.g. `Spanish::Duolingo::<nn>_<Topic>`)
+- 3 sample notes (plain text)
+- `source`: anki / yanki / mixed
 
-### Phase 1: Dual Backend Abstraction
-- Abstract the backend interface in `src/anki_mcp/`:
-  - `AnkiConnectClient`: Current implementation via `localhost:8765`.
-  - `FastAnkiClient`: Headless sync implementation via `fastanki`.
-- Select backend via environment variable: `ANKI_BACKEND=ankiconnect` (default) vs `ANKI_BACKEND=ankiweb`.
+This is what I did by hand when designing the language skill. As a tool, any agent can do it for any deck.
 
-### Phase 2: Headless Audio & Media Integration
-- Adapt [tts.py](src/anki_mcp/tts.py) so `synthesize()` outputs can be directly handed to `fastanki.add_media()`.
-- Ensure generated `[sound:<filename>]` references are formatted correctly for AnkiWeb media uploads.
+## Phase 2: Deck profiles (memory)
 
-### Phase 3: Credentials & Sync Lifecycle
-- Support AnkiWeb authentication via environment variables:
-  - `ANKIWEB_USER`
-  - `ANKIWEB_PASSWORD`
-- Implement sync triggering after write operations (`add_notes`) so updates reach AnkiWeb immediately.
+**Problem:** some things can't be inferred and shouldn't be re-derived every session: which TTS voice a deck uses,
+which field is spoken, conventions ("nouns include the article"), "never add audio here".
 
-### Phase 4: Remote MCP Server Deployment
-- Add HTTP/SSE transport support to [server.py](src/anki_mcp/server.py) so the server can run on lightweight cloud hosts (e.g., Fly.io, Railway, or VPS).
-- Provide a `Dockerfile` and deployment guide for hosting the headless server 24/7.
+**Design:**
+- `get_deck_profile(deck)` returns the **computed** part (from `describe_deck`, cached and refreshed when the note count
+  changes) merged with **user-confirmed** overrides.
+- `set_deck_profile(deck, {voice, audio_field, speak_field, conventions, …})` saves the overrides. Only after the user
+  confirms them.
+- Storage: a local JSON file (`~/.config/anki-mcp/profiles.json`). It's human-editable, and keeping it outside the
+  collection means no schema changes. Later (headless, Phase 6) it could move into the collection, e.g. via note-type
+  field descriptions (`modelFieldSetDescription`), which sync with Anki. **To verify:** whether editing field
+  descriptions forces a full sync.
+- Also expose profiles as MCP **resources** (`anki://deck/<name>/profile`), so a user can attach them to a chat.
 
-## 4. Verification & Testing
+**Result:** `language-cards` becomes generic ("read the deck profile, follow it"), and the table of my decks moves
+out of the skill into my profile file.
 
-- [ ] Unit tests for `FastAnkiClient` using mock sync responses.
-- [ ] Integration test: synthesize MP3 audio via `gTTS`, call `add_media`, call `add_card`, and verify successful sync with AnkiWeb test account.
-- [ ] Mobile verification: sync from AnkiMobile / AnkiDroid to verify cards and audio play without desktop involvement.
+## Phase 3: Reorganizing (move / convert)
+
+Two different operations with very different risk:
+
+| Operation | AnkiConnect | Review history | Sync impact | Risk |
+|---|---|---|---|---|
+| **Move cards to another deck** | `changeDeck` | kept | normal sync | low |
+| **Convert note type** (e.g. `Basic` → `Spanish`, mapping Front→Word, Back→Meaning) | `updateNoteModel` | kept | **schema change → one-way full sync** (the "force push") | high |
+
+- `move_cards(query, target_deck, dry_run=True)`: preview count and sample, then move.
+- `convert_notes(query, target_note_type, field_map, dry_run=True)`: the preview shows before/after for a few notes and
+  lists unmapped fields that would lose data. Refuses Yanki decks (Yanki would recreate or overwrite them).
+
+**Safety protocol for conversions** (the tool enforces it, rather than trusting the model to remember):
+1. Refuse unless the user confirms that **all devices are synced first**. Unsynced phone reviews are lost in a one-way sync.
+2. **Back up** the affected decks with `exportPackage` (`.apkg`, including scheduling), plus a note that Anki keeps its own automatic backups.
+3. Convert in a small batch first, then show the result for the user to check in Anki.
+4. The user then syncs from **desktop** and chooses **Upload to AnkiWeb**. Other devices download once.
+5. Log what was converted (note ids, mapping, backup path) in `~/.config/anki-mcp/history/` for recovery.
+
+Converting existing notes also enables **audio backfill**, e.g. adding `espeak:la` audio to the 233 Latin notes.
+That's a regular field update, so no full sync is needed.
+
+## Phase 4: Remote MCP (Streamable HTTP + auth), still on AnkiConnect
+
+- Add the **Streamable HTTP** transport. (The old SSE transport is deprecated in the MCP spec, so don't build it.)
+- **Authentication is mandatory**: this server can read and write the collection. Use OAuth, which Claude's custom connectors
+  expect, or at least a bearer token for personal use.
+- Run on my Mac and reach it through Tailscale or a Cloudflare Tunnel. This teaches remote MCP with zero sync risk.
+  Limitation: it only works while the Mac and Anki are running.
+
+## Phase 5: Offline queue
+
+- When AnkiConnect is unreachable, `add_notes` stores the validated notes (and generated audio) in a queue instead of failing.
+- On the next call with Anki reachable (or via `flush_queue`), apply them and report the result.
+- This covers most "add a word from my phone" use without touching the AnkiWeb protocol.
+
+## Phase 6: Headless AnkiWeb backend (desktop-free)
+
+**Phase 6.0, feasibility spike (one day), before any design work:**
+- Try [`fastanki`](https://github.com/AnswerDotAI/fastanki) with a **throwaway AnkiWeb account**: log in, download,
+  add one note with an audio file, sync, confirm on AnkiMobile/AnkiDroid that the card and the audio arrived.
+- Check its maturity, media-sync support, and AnkiWeb's terms for unofficial clients.
+- Go/no-go. If no-go, Phases 4–5 remain the mobile story.
+
+**If go:**
+- Backend interface: `AnkiConnectClient` (default) vs `AnkiWebClient`, chosen by `ANKI_BACKEND`.
+- Sync **before and after** every write. **Never accept a full sync automatically**: stop and ask.
+- Automatic backup before each write session; keep the last N.
+- Credentials: log in once and store the **sync key** in the host's secret store, not `ANKIWEB_PASSWORD`.
+- Linux-compatible audio: eSpeak via apt, and `ffmpeg` instead of macOS `afconvert`. `macos:*` voices are unavailable there.
+- Dockerfile and a deployment guide (Fly.io / Railway / VPS).
+
+## Phase 7: Evals and tests (continuous, start now)
+
+- Unit tests with a fake AnkiConnect, so CI runs without Anki.
+- Eval suite: prompts → expected tool calls/arguments via `claude -p --output-format stream-json`. For example, "add these 5
+  Spanish words" should produce one `add_notes` call with the right fields and gender codes, and a Yanki deck should be routed to Obsidian.
+- Compare models (Haiku vs Sonnet) on the language-cards evals to back up the `model: haiku` choice with data.
+
+## Later / maybe
+
+- PyPI release under a distinct name (`anki-mcp` is taken).
+- Better Latin voice if one appears (Google `la`, Microsoft, and Meta MMS were all rejected; see LEARNINGS.md).
