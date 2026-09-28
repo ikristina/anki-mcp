@@ -151,6 +151,10 @@ Save them once as a deck profile, and every session and agent follows them:
 
 Google files are MP3; the offline engines produce M4A (AAC). Anki plays both.
 
+Listen before trusting a voice. Even a good one mispronounces rare words: Google `en-US` gets *chimerical* wrong where
+`en-GB` is right, and only `macos:Samantha` says *kvetch* correctly. To fix one card, clear its audio field in Anki
+(`add_audio` never overwrites) and run `add_audio` on just that note with a different voice.
+
 ## Development
 
 ```bash

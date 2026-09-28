@@ -115,6 +115,11 @@ Your "user" is a model that only sees the tool **name, description, and input sc
   counted as `skipped_no_cloze`; in practice those were typos (`{{c1:word}}`, one colon) that Anki doesn't hide either.
 - **An MCP server keeps running old code until reconnected** (`/mcp` → reconnect). A new tool parameter is silently ignored
   by the old process, so the first dry run after a change must show the new behavior before writing anything.
+- **A good voice still mispronounces rare words, and nothing detects it.** Google `en-US` (and `en-CA`) said *chimerical*
+  wrong while `en-GB` matched Merriam-Webster; *kvetch* was wrong in every Google voice and only `macos:Samantha` got it. The
+  MP3 is valid either way, so the agent can't know; only the user listening does. What works: generate the word in several
+  voices to a scratch dir, let the user pick, then re-voice just that note. `add_audio` never overwrites, so the user clears
+  the audio field first. The fallback order lives in the deck profile's conventions, not in the server.
 
 ## 4. Workflow that works
 

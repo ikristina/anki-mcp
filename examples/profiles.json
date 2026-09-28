@@ -55,5 +55,23 @@
       "Leave Word_suffix, Word_hint, Meaning_suffix, Meaning_hint empty.",
       "Tag French::Duolingo::<nn>_<Topic> if the user names a matching topic, otherwise French::Added."
     ]
+  },
+  "Languages::English": {
+    "note_type": "Cloze",
+    "audio": {
+      "field": "Back Extra",
+      "voice": "en-US",
+      "text_field": "Text"
+    },
+    "fields": {
+      "Text": "(part of speech) definition. Example sentence with the word as {{c1::word}}; an optional IPA transcription may follow the word inside the cloze, e.g. {{c1::virile /ˈvɪr.əl/}}",
+      "Back Extra": "audio only ([sound:...])"
+    },
+    "tags": ["english"],
+    "conventions": [
+      "Audio speaks only the cloze word: use add_audio with cloze_only=true (IPA and hints are dropped).",
+      "For new notes via add_notes, set audio.text to the plain cloze word without transcription.",
+      "Google en-US (and en-CA) mispronounces some rare words, e.g. chimerical; en-GB got it right. If the user reports a wrong pronunciation, they clear Back Extra in Anki and you re-voice that one note with en-GB; if en-GB is wrong too, try macos:Samantha (used for kvetch)."
+    ]
   }
 }
