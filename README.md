@@ -13,15 +13,16 @@ Blog post about building it: [ikristina.github.io/blog/anki-mcp-server](https://
 | `describe_deck` | Works out a deck's format: note types, fields, audio field and its source, code values (e.g. WordType), templates, tag patterns, samples |
 | `list_note_types` | Note types with fields in order and note counts; filter by name to also see template front/back fields. For empty decks or newly imported types |
 | `search_notes` | Anki search syntax, paginated compact previews |
-| `get_notes` | Full content for specific note ids |
+| `get_notes` | Full content for specific note ids; `raw=True` returns stored HTML and `[sound:]` tags, for editing |
 | `get_weak_cards` | Most-forgotten cards (lapses, then ease), optionally per deck |
 | `get_deck_profile` / `set_deck_profile` | Your saved per-deck conventions (note type, audio field + voice, how to fill each field, tags, rules). Stored in a local JSON file, not in Anki |
 | `add_audio` | Adds pronunciation audio to *existing* notes that lack it; dry run by default, batches of ≤50, skips notes that already have audio |
+| `update_notes` | Edits fields of existing notes and adds tags; dry run by default with an old → new diff, tags `mcp-edited`, refuses Yanki notes and edits that would drop audio |
 | `add_notes` | Batch add with validation, `dry_run`, duplicate check, auto-tag `mcp-added`, optional free TTS audio; refuses Yanki-owned decks |
 
 Skills in `.claude/skills/`:
 - `flashcards` routes cards: technical/interview topics become markdown in the Obsidian vault (synced by Yanki), and everything else goes straight to Anki.
-- `language-cards` (`/language-cards <words>`) adds vocabulary with pronunciation audio to any language deck, following that deck's profile. If a deck has no profile yet, it works one out with `describe_deck` and asks you to confirm it.
+- `language-cards` (`/language-cards <words>`) adds vocabulary with pronunciation audio to any language deck, following that deck's profile. If a deck has no profile yet, it works one out with `describe_deck` and asks you to confirm it. It also tidies cards you typed on your phone: fixes the text, adds audio and formats alternative answers.
 
 ## Installation
 

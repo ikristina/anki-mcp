@@ -172,6 +172,11 @@ class FakeAnki:
         self.notes[note["id"]]["fields"].update(note["fields"])
         return None
 
+    def a_addTags(self, notes, tags):
+        for nid in notes:
+            self.notes[nid]["tags"] += [t for t in tags.split() if t not in self.notes[nid]["tags"]]
+        return None
+
 
 @pytest.fixture
 def anki(monkeypatch, tmp_path):

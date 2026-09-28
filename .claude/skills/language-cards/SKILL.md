@@ -1,9 +1,9 @@
 ---
 name: language-cards
-description: Add new foreign-language words or expressions to the user's Anki language decks, with pronunciation audio. Use when the user wants to add, save or learn vocabulary, a phrase or an expression in Spanish, French, Latin, Norwegian or another language, or pastes a list of words to turn into cards. Invocable as /language-cards <words...>.
+description: Add new foreign-language words or expressions to the user's Anki language decks, with pronunciation audio. Use when the user wants to add, save or learn vocabulary, a phrase or an expression in Spanish, French, Latin, Norwegian or another language, or pastes a list of words to turn into cards. Also tidies notes the user typed on their phone (fix text, add audio). Invocable as /language-cards <words...>.
 model: haiku
 effort: low
-allowed-tools: mcp__anki__get_deck_profile, mcp__anki__set_deck_profile, mcp__anki__list_decks, mcp__anki__describe_deck, mcp__anki__list_note_types, mcp__anki__search_notes, mcp__anki__add_notes, mcp__anki__add_audio
+allowed-tools: mcp__anki__get_deck_profile, mcp__anki__set_deck_profile, mcp__anki__list_decks, mcp__anki__describe_deck, mcp__anki__list_note_types, mcp__anki__search_notes, mcp__anki__get_notes, mcp__anki__add_notes, mcp__anki__add_audio, mcp__anki__update_notes
 ---
 
 # Language cards with audio
@@ -44,6 +44,27 @@ If the user corrects a convention along the way ("nouns need the article"), offe
 Use `mcp__anki__add_audio` (not add_notes) with `text_field`, `audio_field` and `voice` from the deck's profile.
 Dry run first (the default), then `dry_run: false` in batches of up to 50 until `remaining` is 0. On a first run for a deck,
 voice ~5 notes and let the user listen before doing the rest.
+
+## 3b. Tidying notes the user added on their phone
+
+Triggered by "tidy / fix up / add audio to the cards I added on my phone" (optionally naming a deck). The user must have
+synced the phone and then the desktop first. If nothing new shows up, remind them.
+
+1. Find them: `search_notes` with `"deck:<deck>" -tag:mcp-added -tag:mcp-edited`. Use `added:14` or similar to narrow it
+   if the user gives a time frame.
+2. Read them with `get_notes(raw=True)`. Raw values keep HTML and `[sound:]` tags that `update_notes` must not lose.
+3. Using the deck profile, propose fixes for each note:
+   - spelling, accents, punctuation, missing articles
+   - informal text the user wrote in a plain field (e.g. `also: X | informal: Y` in `Extra 2`), moved into the
+     profile's format for alternative answers
+   - the profile's tags
+
+   Keep the user's wording; only fix clear mistakes. Ask if a meaning or translation is unclear.
+4. Call `update_notes` as a dry run (the default) with each note's full new field values and `add_tags`. Show the user an
+   old → new table, then call it again with `dry_run: false` once they agree.
+5. Then add audio (section 3) with the same search. Fix the text *before* adding audio, so the audio speaks the corrected
+   text. Alternative answers in `<span class="alt">` are never spoken.
+6. Tell the user to sync so the phone gets the changes.
 
 ## 4. Notes
 

@@ -130,6 +130,10 @@ Your "user" is a model that only sees the tool **name, description, and input sc
   `<script>window.alwaysShowInfo = true;</script>` at the top of each back template (`window.flipDelay = <s>` only lengthens the wait).
   `#error loading answer!` in Preview is expected: the back reads the answer from `sessionStorage`, and Preview never sets it.
   The Memrise add-on (884199977) breaks the editor on Anki 26.09 (`NewEditor` has no `.note`), but the templates work without it.
+- **An edit tool needs a raw read path.** `get_notes` strips HTML to keep results small, so a model editing from it would
+  quietly erase `<b>`, alt spans and `[sound:]` tags. `update_notes` therefore comes with `get_notes(raw=True)`, only
+  changes the fields it is given, and refuses any edit that drops a `[sound:]` tag. It is a dry run by default, like `add_audio`.
+  TTS text also skips `<span class="alt">`, so a note with alternatives is voiced with only its main answer.
 
 ## 4. Workflow that works
 

@@ -69,14 +69,23 @@ def _cloze_text(value: str) -> str:
     return ", ".join(words)
 
 
+_ALT_RE = re.compile(r"<span\b[^>]*\b(?:class=\"[^\"]*\balt\b[^\"]*\"|part=\"alt\")[^>]*>.*?</span>", re.IGNORECASE | re.DOTALL)
+
+
 def _speech_text(value: str, cloze_only: bool) -> str:
-    value = _SOUND_RE.sub("", value)
+    """Text to voice: no [sound:] tags, and no alternative answers (<span class="alt">, used by Memrise-style templates)."""
+    value = _ALT_RE.sub("", _SOUND_RE.sub("", value))
     return _cloze_text(value) if cloze_only else _plain(value, None)
 
 
 def _fields(note: dict, limit: int | None) -> dict[str, str]:
     ordered = sorted(note["fields"].items(), key=lambda kv: kv[1]["order"])
     return {name: _plain(f["value"], limit) for name, f in ordered}
+
+
+def _raw_fields(note: dict) -> dict[str, str]:
+    ordered = sorted(note["fields"].items(), key=lambda kv: kv[1]["order"])
+    return {name: f["value"] for name, f in ordered}
 
 
 def _decks_for_notes(notes: list[dict]) -> dict[int, str]:
@@ -196,7 +205,13 @@ def search_notes(
 
 
 @mcp.tool(annotations=READ_ONLY)
-def get_notes(note_ids: Annotated[list[int], Field(min_length=1, max_length=50)]) -> list[dict]:
+def get_notes(
+    note_ids: Annotated[list[int], Field(min_length=1, max_length=50)],
+    raw: Annotated[
+        bool,
+        Field(description="True: field values exactly as stored (HTML, [sound:] tags). Use before update_notes."),
+    ] = False,
+) -> list[dict]:
     """Get the full content of specific notes (HTML stripped, not truncated). Get ids from search_notes."""
     notes = [n for n in invoke("notesInfo", notes=note_ids) if n.get("noteId")]
     decks = _decks_for_notes(notes)
@@ -206,7 +221,7 @@ def get_notes(note_ids: Annotated[list[int], Field(min_length=1, max_length=50)]
             "deck": decks.get(n["noteId"], "?"),
             "note_type": n["modelName"],
             "tags": n["tags"],
-            "fields": _fields(n, None),
+            "fields": _raw_fields(n) if raw else _fields(n, None),
         }
         for n in notes
     ]
@@ -409,7 +424,7 @@ def _attach_audio(addable, notes, field_cache, results):
     for i, payload in addable:
         spec = notes[i].audio
         if spec:
-            text = spec.text or _plain(notes[i].fields[field_cache[notes[i].note_type][0]], None)
+            text = spec.text or _speech_text(notes[i].fields[field_cache[notes[i].note_type][0]], False)
             try:
                 filename, mp3 = synthesize(text, spec.voice)
             except AnkiError as e:
@@ -592,6 +607,77 @@ def add_audio(
     result.update(voiced=done, failed=failed, remaining=len(todo) - len(done))
     result["note"] = "If a note is open in Anki's browser/editor, reopen it to see the change."
     return result
+
+
+EDITED_TAG = "mcp-edited"
+DIFF_CHARS = 300
+
+
+class NoteUpdate(BaseModel):
+    note_id: int = Field(description="Note id from search_notes / get_notes.")
+    fields: dict[str, str] = Field(
+        default_factory=dict,
+        description="Field name -> complete new value (raw HTML, as get_notes(raw=True) shows it). Only the fields "
+        "listed change; to edit part of a field, copy its raw value and change just that part.",
+    )
+    add_tags: list[str] = Field(default_factory=list, description="Tags to add (existing tags are kept).")
+
+
+@mcp.tool(annotations=ToolAnnotations(destructive_hint=True, idempotent_hint=True, open_world_hint=False))
+def update_notes(
+    updates: Annotated[list[NoteUpdate], Field(min_length=1, max_length=50)],
+    dry_run: Annotated[bool, Field(description="Default True: show old -> new per field. Set False to write.")] = True,
+) -> dict:
+    """Edit fields of EXISTING notes and/or add tags, e.g. tidy notes the user typed on their phone.
+
+    Read the notes with get_notes(raw=True) first, so formatting and [sound:] tags aren't lost. Refused per note:
+    Yanki notes (Obsidian would overwrite them), unknown fields, and edits that would remove a [sound:] tag
+    (audio is only added, via add_audio). Changed notes get the tag 'mcp-edited'. Review history is untouched.
+    Dry run by default: show the user the old -> new diff, then call again with dry_run=False.
+    """
+    found = {n["noteId"]: n for n in invoke("notesInfo", notes=[u.note_id for u in updates]) if n.get("noteId")}
+    results, apply = [], []
+    for u in updates:
+        n = found.get(u.note_id)
+        if n is None:
+            results.append({"note_id": u.note_id, "status": "error", "error": "Note not found. Get ids from search_notes."})
+            continue
+        if n["modelName"].startswith("Yanki"):
+            results.append({"note_id": u.note_id, "status": "error", "error": "Yanki note: edit its markdown in the "
+                            "Obsidian vault instead, or the next Yanki sync overwrites the change."})
+            continue
+        unknown = sorted(set(u.fields) - set(n["fields"]))
+        if unknown:
+            results.append({"note_id": u.note_id, "status": "error",
+                            "error": f"Unknown fields {unknown} for '{n['modelName']}'. Valid fields: {list(n['fields'])}."})
+            continue
+        new = {f: _to_html(v) for f, v in u.fields.items() if _to_html(v) != n["fields"][f]["value"]}
+        lost = [f for f, v in new.items() if set(_SOUND_RE.findall(n["fields"][f]["value"])) - set(_SOUND_RE.findall(v))]
+        if lost:
+            results.append({"note_id": u.note_id, "status": "error", "error": f"Would remove audio from {lost}. "
+                            "Keep the [sound:...] tag in the new value (read it with get_notes(raw=True))."})
+            continue
+        tags = [t for t in u.add_tags if t not in n["tags"]]
+        if not new and not tags:
+            results.append({"note_id": u.note_id, "status": "unchanged"})
+            continue
+        entry = {"note_id": u.note_id, "status": "would_update" if dry_run else "updated",
+                 "changes": {f: {"old": n["fields"][f]["value"][:DIFF_CHARS], "new": v[:DIFF_CHARS]} for f, v in new.items()}}
+        if tags:
+            entry["add_tags"] = tags
+        results.append(entry)
+        apply.append((u.note_id, new, tags))
+
+    if not dry_run:
+        for nid, new, tags in apply:
+            if new:
+                invoke("updateNoteFields", note={"id": nid, "fields": new})
+            invoke("addTags", notes=[nid], tags=" ".join([*tags, EDITED_TAG]))
+    summary = Counter(r["status"] for r in results)
+    out = {"dry_run": dry_run, "summary": dict(summary), "results": results}
+    if not dry_run and apply:
+        out["note"] = "If a note is open in Anki's browser/editor, reopen it to see the change."
+    return out
 
 
 @mcp.tool(annotations=READ_ONLY)

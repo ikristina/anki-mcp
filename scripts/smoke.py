@@ -30,7 +30,7 @@ async def main():
     async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
         await s.initialize()
         names = {t.name for t in (await s.list_tools()).tools}
-        expected = {"list_decks", "describe_deck", "search_notes", "get_notes", "get_weak_cards", "list_note_types", "add_notes", "add_audio", "get_deck_profile", "set_deck_profile"}
+        expected = {"list_decks", "describe_deck", "search_notes", "get_notes", "get_weak_cards", "list_note_types", "add_notes", "add_audio", "update_notes", "get_deck_profile", "set_deck_profile"}
         check("all tools registered", names == expected, ", ".join(sorted(names)))
 
         decks = items(await s.call_tool("list_decks", {}))
@@ -81,6 +81,19 @@ async def main():
         check("add_audio dry run plans a batch", plan["dry_run"] and len(plan["would_voice"]) <= 3, f"eligible {plan['eligible']}")
         fake = await s.call_tool("add_audio", {**latin, "voice": "la"})
         check("add_audio rejects Google 'la' even in dry run", fake.is_error and "espeak:la" in fake.content[0].text)
+
+        voiced = items(await s.call_tool("search_notes", {"query": '"deck:Languages::🇪🇸 Spanish" Audio:*sound*', "limit": 1}))[0]["notes"]
+        if voiced:
+            nid = voiced[0]["note_id"]
+            raw = items(await s.call_tool("get_notes", {"note_ids": [nid], "raw": True}))[0]["fields"]
+            check("get_notes raw keeps [sound:] tags", "[sound:" in raw.get("Audio", ""), raw.get("Audio", "")[:60])
+            upd = items(await s.call_tool("update_notes", {"updates": [
+                {"note_id": nid, "fields": {"Audio": ""}},
+                {"note_id": nid, "fields": {"Meaning": raw["Meaning"] + " (smoke)"}},
+            ]}))[0]
+            check("update_notes dry run refuses audio removal and shows a diff",
+                  upd["dry_run"] and "Would remove audio" in upd["results"][0].get("error", "") and upd["results"][1]["status"] == "would_update",
+                  str(upd["summary"]))
 
         bad = await s.call_tool("search_notes", {"query": "deck:Go", "limit": 500})
         check("schema rejects limit=500 with a readable error", bad.is_error and "less than or equal to 100" in bad.content[0].text)

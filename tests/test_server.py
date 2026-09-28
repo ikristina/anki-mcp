@@ -2,7 +2,8 @@ import pytest
 
 from anki_mcp import server
 from anki_mcp.client import AnkiError
-from anki_mcp.server import AudioSpec, NoteInput, add_audio, add_notes, describe_deck, get_weak_cards, list_decks, list_note_types, search_notes
+from anki_mcp.server import (AudioSpec, NoteInput, NoteUpdate, add_audio, add_notes, describe_deck, get_notes, get_weak_cards, list_decks,
+                             list_note_types, search_notes, update_notes)
 
 SPANISH = {"deck": "Languages::Spanish", "note_type": "Spanish"}
 LATIN_Q = '"deck:Languages::Latin"'
@@ -207,3 +208,60 @@ def test_add_audio_cloze_only_speaks_the_cloze_word(anki):
 def test_add_audio_skips_yanki_notes(anki):
     r = add_audio('"deck:Go"', "Front", "Back", "es-MX")
     assert r["skipped_yanki"] == 1 and r["eligible"] == 0
+
+
+def test_add_audio_does_not_speak_alternative_answers(anki):
+    anki.add("Languages::Spanish", "Basic (and reversed card)",
+             {"Front": 'Hay que irnos a dormir.<span class="alt">Vámonos a dormir.|Hay que dormirnos.</span>', "Back": "Let's go to sleep."})
+    r = add_audio('"deck:Languages::Spanish" "note:Basic (and reversed card)"', "Front", "Audio", "es-MX")
+    assert [x["text"] for x in r["would_voice"]] == ["Hay que irnos a dormir."]
+
+
+# --- get_notes / update_notes ------------------------------------------------------------------------------------
+
+def _note_id(anki, deck, first_value):
+    return next(nid for nid, n in anki.notes.items() if n["deck"] == deck and next(iter(n["fields"].values())) == first_value)
+
+
+def test_get_notes_raw_keeps_html_and_sound(anki):
+    nid = _note_id(anki, "Languages::Latin", "Marcum <b>excitamus</b>.")
+    assert get_notes([nid])[0]["fields"]["Front"] == "Marcum excitamus."
+    assert get_notes([nid], raw=True)[0]["fields"]["Front"] == "Marcum <b>excitamus</b>."
+
+
+def test_update_notes_dry_run_shows_diff_without_writing(anki):
+    nid = _note_id(anki, "Languages::Latin", "Socius")
+    r = update_notes([NoteUpdate(note_id=nid, fields={"Back": "Companion, ally"}, add_tags=["checked"])])
+    assert r["dry_run"] and r["summary"] == {"would_update": 1}
+    assert r["results"][0]["changes"] == {"Back": {"old": "Companion", "new": "Companion, ally"}}
+    assert r["results"][0]["add_tags"] == ["checked"]
+    assert anki.notes[nid]["fields"]["Back"] == "Companion" and "checked" not in anki.notes[nid]["tags"]
+
+
+def test_update_notes_writes_fields_and_tags(anki):
+    nid = _note_id(anki, "Languages::Latin", "Socius")
+    r = update_notes([NoteUpdate(note_id=nid, fields={"Back": "Companion", "Front": "Socius, -i"}, add_tags=["checked"])], dry_run=False)
+    assert r["summary"] == {"updated": 1}
+    assert list(r["results"][0]["changes"]) == ["Front"]  # unchanged Back isn't rewritten
+    assert anki.notes[nid]["fields"]["Front"] == "Socius, -i"
+    assert anki.notes[nid]["tags"] == ["latin", "checked", "mcp-edited"]
+    assert update_notes([NoteUpdate(note_id=nid, fields={"Front": "Socius, -i"})], dry_run=False)["summary"] == {"unchanged": 1}
+
+
+def test_update_notes_refusals(anki):
+    with_audio = _note_id(anki, "Languages::Latin", "Puella rosam amat.")
+    yanki = _note_id(anki, "Go", "Channels?")
+    r = update_notes([
+        NoteUpdate(note_id=with_audio, fields={"Audio": ""}),
+        NoteUpdate(note_id=yanki, fields={"Back": "x"}),
+        NoteUpdate(note_id=with_audio, fields={"Sound": "x"}),
+        NoteUpdate(note_id=999999, fields={"Front": "x"}),
+        NoteUpdate(note_id=with_audio, fields={"Audio": "[sound:anki-mcp-x.m4a]", "Back": "The girl loves the rose!"}),
+    ], dry_run=False)
+    errors = [x.get("error", "") for x in r["results"]]
+    assert "Would remove audio" in errors[0]
+    assert "Obsidian" in errors[1]
+    assert "Valid fields" in errors[2]
+    assert "not found" in errors[3]
+    assert r["results"][4]["status"] == "updated"  # keeping the [sound:] tag is fine
+    assert anki.notes[yanki]["fields"]["Back"] == "Pipes."

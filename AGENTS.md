@@ -21,7 +21,7 @@ extend `tests/conftest.py`'s `FakeAnki` when the server starts using a new AnkiC
 
 ## Layout
 
-- `src/anki_mcp/server.py`: the MCP tools (`list_decks`, `describe_deck`, `list_note_types`, `search_notes`, `get_notes`, `get_weak_cards`, `add_notes`, `add_audio`, `get_deck_profile`, `set_deck_profile`)
+- `src/anki_mcp/server.py`: the MCP tools (`list_decks`, `describe_deck`, `list_note_types`, `search_notes`, `get_notes`, `get_weak_cards`, `add_notes`, `add_audio`, `update_notes`, `get_deck_profile`, `set_deck_profile`)
 - `src/anki_mcp/client.py`: AnkiConnect HTTP client and `AnkiError`
 - `src/anki_mcp/profiles.py`: deck profiles, a JSON file at `~/.config/anki-mcp/profiles.json` (`ANKI_MCP_PROFILES` overrides it; tests point it at a tmp dir)
 - `examples/profiles.json`: the maintainer's real profiles, as an example
