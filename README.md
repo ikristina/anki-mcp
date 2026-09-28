@@ -5,6 +5,8 @@
 An MCP server that gives agents (Claude Code, Claude Desktop, …) access to your local Anki collection via
 [AnkiConnect](https://ankiweb.net/shared/info/2055492159).
 
+Blog post about building it: [ikristina.github.io/blog/anki-mcp-server](https://ikristina.github.io/blog/anki-mcp-server/).
+
 | Tool | What it does |
 |---|---|
 | `list_decks` | Decks with counts and `source` (`anki` / `yanki` = synced from Obsidian / `mixed`) |

@@ -2,10 +2,21 @@ import json
 
 import pytest
 
-from anki_mcp import profiles
+from anki_mcp import profiles, server, tts
 from anki_mcp.client import AnkiError
 from anki_mcp.profiles import AudioProfile, DeckProfile
 from anki_mcp.server import describe_deck, get_deck_profile, set_deck_profile
+
+
+@pytest.fixture(autouse=True)
+def _espeak_installed(monkeypatch):
+    # CI has no eSpeak NG: accept espeak:* voices, keep the real checks for everything else (e.g. Google 'la').
+    def validate(voice):
+        if not voice.startswith("espeak:"):
+            tts.validate_voice(voice)
+
+    monkeypatch.setattr(server, "validate_voice", validate)
+
 
 LATIN = "Languages::Latin"
 LATIN_PROFILE = DeckProfile(

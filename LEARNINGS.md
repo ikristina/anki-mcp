@@ -86,6 +86,9 @@ Your "user" is a model that only sees the tool **name, description, and input sc
   weeks later), and **where it lives** (outside the collection, so saving never triggers an Anki sync). Separate
   *inferred* facts (`describe_deck`, recomputed each time) from *decided* ones (the profile). An inference can go stale;
   a decision is the user's to change.
+- "Passes on my machine" isn't CI. The profile tests passed locally because `espeak-ng` is installed on my Mac, and
+  failed on CI's Ubuntu runner, which doesn't have it. Unit tests shouldn't depend on system binaries, so the profile tests stub the eSpeak
+  check. To reproduce CI's environment before pushing: `env PATH=/usr/bin:/bin .venv/bin/python -m pytest -q`.
 - Tests must isolate any file the server writes: the `anki` fixture points `ANKI_MCP_PROFILES` at `tmp_path`. Otherwise
   a test run would overwrite the real profiles.
 
