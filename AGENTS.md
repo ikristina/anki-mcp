@@ -11,18 +11,21 @@ An MCP server (Python, stdio) that exposes a local Anki collection to agents thr
 
 ```bash
 uv sync                               # install deps
+uv run pytest -q                      # unit tests with a fake AnkiConnect; no Anki or network needed (CI runs these)
 uv run python scripts/smoke.py        # end-to-end check over stdio; exits non-zero on failure. Needs Anki running
 uv run anki-mcp                       # run the server (stdio); normally launched by the agent host, not by hand
 ```
 
-Run the smoke test after every change to `src/`. There are no unit tests yet.
+Run `pytest` after every change to `src/`, and the smoke test too when Anki is available. New tools need unit tests;
+extend `tests/conftest.py`'s `FakeAnki` when the server starts using a new AnkiConnect action or search term (it raises on unknown ones).
 
 ## Layout
 
 - `src/anki_mcp/server.py`: the MCP tools (`list_decks`, `describe_deck`, `search_notes`, `get_notes`, `get_weak_cards`, `add_notes`, `add_audio`)
 - `src/anki_mcp/client.py`: AnkiConnect HTTP client and `AnkiError`
 - `src/anki_mcp/tts.py`: free TTS engines selected by voice string: `es-MX` (Google/gTTS), `espeak:la`, `macos:Alice`
-- `scripts/smoke.py`: stdio client that asserts on real tool results
+- `tests/`: unit tests; `conftest.py` has `FakeAnki`, an in-memory AnkiConnect
+- `scripts/smoke.py`: stdio client that asserts on real tool results against the real collection
 - `.claude/skills/`: `flashcards` (routes technical cards to Obsidian/Yanki) and `language-cards` (vocab + audio)
 - `LEARNINGS.md`: design notes and gotchas. **Append to it** whenever you learn something non-obvious.
 - `ROADMAP.md`: planned headless / AnkiWeb-sync work

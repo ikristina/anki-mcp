@@ -48,6 +48,14 @@ Your "user" is a model that only sees the tool **name, description, and input sc
 - Skills installed globally as **symlinks** (`~/.claude/skills/x -> repo/.claude/skills/x`): available in every project,
   one source of truth, updated by `git pull`.
 
+- **A fake of the external system makes tests possible anywhere, and finds real bugs.** `tests/conftest.py` has
+  `FakeAnki`, which answers the ~15 AnkiConnect actions the server uses from an in-memory collection. It *raises* on any action or
+  search term it doesn't model, so the fake can't silently drift from what the server needs. Its first run found two bugs
+  in `_plain` (the HTML stripper that also feeds TTS): `&nbsp;` left a doubled space, and inline tags became spaces
+  (`Marcum <b>excitamus</b>.` → `Marcum excitamus .`). The smoke test never hit these, because the real data it checked had no inline HTML.
+- Keep the two test layers: **unit tests** (fast, deterministic, CI, edge cases on purpose) and the **smoke test**
+  (real stdio + real collection, catches API quirks the fake doesn't know about, such as `getDeckStats` returning leaf names).
+
 ## 3. Gotchas hit
 
 - **MCP Python SDK 2.x (2026) renamed `FastMCP` → `MCPServer`** (`from mcp.server.mcpserver import MCPServer`). Most tutorials, blog posts and LLM training data still show v1. Always check the installed version and read the package source or migration guide. Also, v2 uses snake_case client attributes (`result.is_error`, not `isError`).

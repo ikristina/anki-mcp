@@ -1,5 +1,7 @@
 # anki-mcp
 
+[![CI](https://github.com/ikristina/anki-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ikristina/anki-mcp/actions/workflows/ci.yml)
+
 An MCP server that gives agents (Claude Code, Claude Desktop, …) access to your local Anki collection via
 [AnkiConnect](https://ankiweb.net/shared/info/2055492159).
 
@@ -131,6 +133,13 @@ note types, so adapt the tables to your collection.
 | `macos:Alice` (any `say -v '?'` voice) | macOS `say` | macOS | natural offline voices |
 
 Google files are MP3; the offline engines produce M4A (AAC). Anki plays both.
+
+## Development
+
+```bash
+uv run pytest -q                # unit tests: fake in-memory AnkiConnect, no Anki/network needed (runs in CI)
+uv run python scripts/smoke.py  # end-to-end over stdio against your real collection (read-only; Anki must be running)
+```
 
 See [LEARNINGS.md](LEARNINGS.md) for design notes.
 

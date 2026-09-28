@@ -31,12 +31,18 @@ READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 PREVIEW_CHARS = 120
 ADDED_TAG = "mcp-added"
 _TAG_RE = re.compile(r"<[^>]+>")
+_BLOCK_TAG_RE = re.compile(r"<(?:br|/?div|/?p|/?li)\b[^>]*>", re.IGNORECASE)
 
 
 def _plain(value: str, limit: int | None = PREVIEW_CHARS) -> str:
-    """Strip HTML so previews are readable and cheap in tokens."""
-    text = html.unescape(_TAG_RE.sub(" ", value.replace("<br>", "\n")))
-    text = re.sub(r"[ \t]+", " ", text).strip()
+    """Strip HTML so previews are readable and cheap in tokens; also the text sent to TTS.
+
+    Block tags become line breaks; inline tags (<b>, <i>, <span>) vanish without adding spaces,
+    so 'Marcum <b>excitamus</b>.' reads 'Marcum excitamus.' rather than 'Marcum excitamus .'.
+    """
+    text = html.unescape(_TAG_RE.sub("", _BLOCK_TAG_RE.sub("\n", value)))
+    text = re.sub(r"[ \t ]+", " ", text)
+    text = re.sub(r"\s*\n\s*", "\n", text).strip()
     if limit and len(text) > limit:
         return text[:limit].rstrip() + "…"
     return text
