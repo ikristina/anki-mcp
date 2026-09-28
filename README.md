@@ -11,6 +11,7 @@ Blog post about building it: [ikristina.github.io/blog/anki-mcp-server](https://
 |---|---|
 | `list_decks` | Decks with counts and `source` (`anki` / `yanki` = synced from Obsidian / `mixed`) |
 | `describe_deck` | Works out a deck's format: note types, fields, audio field and its source, code values (e.g. WordType), templates, tag patterns, samples |
+| `list_note_types` | Note types with fields in order and note counts; filter by name to also see template front/back fields. For empty decks or newly imported types |
 | `search_notes` | Anki search syntax, paginated compact previews |
 | `get_notes` | Full content for specific note ids |
 | `get_weak_cards` | Most-forgotten cards (lapses, then ease), optionally per deck |
@@ -123,7 +124,17 @@ the relevant `SKILL.md` body into that agent's rules/instructions file. Deck-spe
 
 - `ANKI_CONNECT_URL`, if AnkiConnect isn't on `http://127.0.0.1:8765`
   (`claude mcp add anki -e ANKI_CONNECT_URL=http://... -- ...`).
-- Obsidian with the Local REST API plugin and an Obsidian MCP server, needed only for the `flashcards` skill's Yanki path.
+
+### Obsidian (optional, for Yanki decks)
+
+This server never reads or writes Obsidian. It only spots Yanki decks (`source: yanki`) and refuses to add cards to
+them. To put new cards there, the agent has to write markdown into your vault by some other route: a separate
+Obsidian MCP server, or plain file access to the vault folder. Either works. A filesystem-based server such as
+[`obsidian-mcp`](https://www.npmjs.com/package/obsidian-mcp) (`claude mcp add obsidian -- npx -y obsidian-mcp /path/to/vault`)
+edits the files directly, so Obsidian doesn't need to be running. A server built on the Local REST API plugin needs
+Obsidian open but can also run commands. Either way, you still run **Yanki: Sync** in Obsidian to get the cards into
+Anki. Without either kind of access, the `flashcards` skill can still write cards for Anki-owned decks, but for Yanki
+decks it can only show you the markdown to paste in yourself.
 
 ## Deck profiles
 

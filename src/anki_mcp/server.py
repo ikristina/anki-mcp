@@ -305,7 +305,7 @@ def describe_deck(
     if saved := profiles.load().get(deck):
         result["profile"] = saved.model_dump(exclude_defaults=True)
     if not own_ids:
-        result["hint"] = "No notes directly in this deck. Describe one of its subdecks instead." if subdecks else "Empty deck."
+        result["hint"] = "No notes directly in this deck. Describe one of its subdecks instead." if subdecks else "Empty deck. Use list_note_types to pick a note type."
         return result
 
     analyzed = sorted(own_ids)[-sample_size:]  # note ids are creation timestamps: keep the most recent
@@ -332,6 +332,41 @@ def describe_deck(
     patterns = Counter("::".join(t.split("::")[:-1]) + "::*" for t in tags.elements() if "::" in t)
     result["tags"] = {"most_common": dict(tags.most_common(8)), "hierarchies": dict(patterns.most_common(5))}
     result["samples"] = [{"note_type": n["modelName"], "fields": _fields(n, 80), "tags": n["tags"]} for n in notes[-3:]]
+    return result
+
+
+MAX_TEMPLATE_DETAIL = 5
+
+
+@mcp.tool(annotations=READ_ONLY)
+def list_note_types(
+    name: Annotated[
+        str | None,
+        Field(description="Case-insensitive substring of the note type name, e.g. 'memrise'. Omit to list all."),
+    ] = None,
+) -> list[dict]:
+    """List the collection's note types (models) with their fields in order and how many notes use each.
+
+    Use it to pick a note type for add_notes or set_deck_profile when a deck is empty or you need a type the deck
+    doesn't use yet, e.g. one just imported with a shared deck. When at most 5 types match, each also shows which
+    fields its card templates put on the front/back. To see how a deck actually fills the fields, use describe_deck.
+    """
+    names = sorted(invoke("modelNames"), key=str.lower)
+    if name:
+        matches = [n for n in names if name.lower() in n.lower()]
+        if not matches:
+            close = difflib.get_close_matches(name, names, n=5, cutoff=0.5)
+            raise AnkiError(f"No note type matches '{name}'. Similar: {close or 'none'}. Omit name to list all.")
+        names = matches
+    result = []
+    for n in names:
+        escaped = re.sub(r'([\\"*_])', r"\\\1", n)
+        entry = {"note_type": n, "fields": invoke("modelFieldNames", modelName=n),
+                 "notes": len(invoke("findNotes", query=f'"note:{escaped}"'))}
+        if len(names) <= MAX_TEMPLATE_DETAIL:
+            templates = invoke("modelFieldsOnTemplates", modelName=n)
+            entry["templates"] = {t: {"front": sides[0], "back": sides[1]} for t, sides in templates.items()}
+        result.append(entry)
     return result
 
 

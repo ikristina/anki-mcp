@@ -69,6 +69,9 @@ Your "user" is a model that only sees the tool **name, description, and input sc
   *leaf* deck name (`04_Transactions`), not the full path, so subdecks collided. The fix is to key by deck id.
 - **Check a heuristic against the counts before trusting it.** "Every deck with Yanki notes is Yanki-owned" looked true until counts showed `Languages::Latin` = 2 Yanki / 464 total. The rule became: `yanki` only if all own cards are Yanki, `mixed` if some are.
 - Read the other system's config instead of inferring. Yanki's `data.json` lists exactly which vault folders sync.
+- **`describe_deck` can't help with an empty deck**, which is exactly when a user has just imported a shared deck's
+  note type and wants to start filling a new deck. `list_note_types` fills that gap. Counting its notes uses
+  `"note:<name>"`, escaped the same way as deck names (`_` and `*` are wildcards), so a type like `Basic_v2` doesn't match other types.
 
 ## 3b. Server vs. skill: where each rule belongs
 
@@ -120,6 +123,13 @@ Your "user" is a model that only sees the tool **name, description, and input sc
   MP3 is valid either way, so the agent can't know; only the user listening does. What works: generate the word in several
   voices to a scratch dir, let the user pick, then re-voice just that note. `add_audio` never overwrites, so the user clears
   the audio field first. The fallback order lives in the deck profile's conventions, not in the server.
+- **Shared note types can hold logic in the template's own JS; read it before choosing a field format.** The Memrise (Lτ)
+  Tapping+Typing preset builds its tapping tiles from all of the answer's text, so `;` alternatives got scrambled into the tiles.
+  Alternatives go in `<span class="alt">a|b</span>`, which is kept out of the tiles but still accepted as an answer. The
+  same templates auto-rate a correct answer as Good after 1.5 s, which cuts off the audio. The undocumented fix is
+  `<script>window.alwaysShowInfo = true;</script>` at the top of each back template (`window.flipDelay = <s>` only lengthens the wait).
+  `#error loading answer!` in Preview is expected: the back reads the answer from `sessionStorage`, and Preview never sets it.
+  The Memrise add-on (884199977) breaks the editor on Anki 26.09 (`NewEditor` has no `.note`), but the templates work without it.
 
 ## 4. Workflow that works
 

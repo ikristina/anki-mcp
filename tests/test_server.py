@@ -2,7 +2,7 @@ import pytest
 
 from anki_mcp import server
 from anki_mcp.client import AnkiError
-from anki_mcp.server import AudioSpec, NoteInput, add_audio, add_notes, describe_deck, get_weak_cards, list_decks, search_notes
+from anki_mcp.server import AudioSpec, NoteInput, add_audio, add_notes, describe_deck, get_weak_cards, list_decks, list_note_types, search_notes
 
 SPANISH = {"deck": "Languages::Spanish", "note_type": "Spanish"}
 LATIN_Q = '"deck:Languages::Latin"'
@@ -78,6 +78,29 @@ def test_describe_deck_parent_only_and_typo(anki):
 
 def test_describe_deck_handles_underscore_deck(anki):
     assert describe_deck("Languages::_Pimsleur")["notes"] == 1
+
+
+# --- list_note_types ---------------------------------------------------------------------------------------------
+
+def test_list_note_types_all_are_compact(anki, monkeypatch):
+    monkeypatch.setattr(server, "MAX_TEMPLATE_DETAIL", 3)  # the fake has only 5 types; the real collection ~50
+    types = {t["note_type"]: t for t in list_note_types()}
+    assert set(types) == {"Basic", "Basic (and reversed card)", "Spanish", "Yanki - Basic", "Cloze"}
+    assert types["Spanish"] == {"note_type": "Spanish", "fields": ["Word", "Meaning", "WordType", "Gender", "Audio"], "notes": 6}
+    assert types["Cloze"]["notes"] == 0
+
+
+def test_list_note_types_filter_adds_templates(anki):
+    [basic_rev] = [t for t in list_note_types("REVERSED")]
+    assert basic_rev["notes"] == 3
+    assert basic_rev["templates"]["Card 2"] == {"front": ["Back"], "back": ["Front", "Audio"]}
+    # 'Basic' alone must not count the 'Basic (and reversed card)' notes
+    assert next(t for t in list_note_types("basic") if t["note_type"] == "Basic")["notes"] == 1
+
+
+def test_list_note_types_no_match_suggests(anki):
+    with pytest.raises(AnkiError, match="Spanish"):
+        list_note_types("Spansh")
 
 
 # --- add_notes ---------------------------------------------------------------------------------------------------

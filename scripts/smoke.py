@@ -30,7 +30,7 @@ async def main():
     async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
         await s.initialize()
         names = {t.name for t in (await s.list_tools()).tools}
-        expected = {"list_decks", "describe_deck", "search_notes", "get_notes", "get_weak_cards", "add_notes", "add_audio", "get_deck_profile", "set_deck_profile"}
+        expected = {"list_decks", "describe_deck", "search_notes", "get_notes", "get_weak_cards", "list_note_types", "add_notes", "add_audio", "get_deck_profile", "set_deck_profile"}
         check("all tools registered", names == expected, ", ".join(sorted(names)))
 
         decks = items(await s.call_tool("list_decks", {}))
@@ -49,6 +49,10 @@ async def main():
         check("describe_deck reads templates", "Read" in spanish_type.get("templates", {}), ", ".join(spanish_type.get("templates", {})))
         typo = await s.call_tool("describe_deck", {"deck": "Spansh"})
         check("describe_deck suggests on typo", typo.is_error and "Spanish" in typo.content[0].text)
+
+        nts = items(await s.call_tool("list_note_types", {"name": "Spanish"}))
+        sp = next((t for t in nts if t["note_type"] == "Spanish"), {})
+        check("list_note_types filters and counts", "WordType" in sp.get("fields", []) and sp.get("notes", 0) > 0, f"{len(nts)} types, Spanish: {sp.get('notes')} notes")
 
         page = items(await s.call_tool("search_notes", {"query": "deck:Go", "limit": 3}))[0]
         check("search_notes paginates", page["returned"] == 3 and page["total"] >= 3, f"{page['returned']} of {page['total']}")

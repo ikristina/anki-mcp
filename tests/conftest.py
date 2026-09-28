@@ -73,7 +73,8 @@ class FakeAnki:
             name = re.sub(r"\\(.)", r"\1", raw[:-3] if wildcard else raw)
             ok = n["deck"].startswith(name + "::") if wildcard else (n["deck"] == name or n["deck"].startswith(name + "::"))
         elif term.startswith("note:"):
-            ok = fnmatch.fnmatchcase(n["model"], term[5:])
+            raw = term[5:]  # escaped names match exactly; unescaped '*' is a wildcard
+            ok = n["model"] == re.sub(r"\\(.)", r"\1", raw) if "\\" in raw else fnmatch.fnmatchcase(n["model"], raw)
         elif term == "prop:lapses>0":
             ok = n["lapses"] > 0
         elif term == "is:suspended":
@@ -137,6 +138,9 @@ class FakeAnki:
             out.append({"cardId": c, "note": c // 10, "deckName": n["deck"], "lapses": n["lapses"], "factor": 2500,
                         "interval": 3, "fields": self._info(c // 10)["fields"]})
         return out
+
+    def a_modelNames(self):
+        return list(MODELS)
 
     def a_modelFieldNames(self, modelName):
         if modelName not in MODELS:
