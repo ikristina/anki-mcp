@@ -18,12 +18,14 @@ MODELS = {
     "Basic (and reversed card)": ["Front", "Back", "Audio"],
     "Spanish": ["Word", "Meaning", "WordType", "Gender", "Audio"],
     "Yanki - Basic": ["Front", "Back", "YankiNamespace"],
+    "Cloze": ["Text", "Back Extra"],
 }
 TEMPLATES = {
     "Basic": {"Card 1": [["Front"], ["Back"]]},
     "Basic (and reversed card)": {"Card 1": [["Front", "Audio"], ["Back"]], "Card 2": [["Back"], ["Front", "Audio"]]},
     "Spanish": {"Read": [["Word", "Audio"], ["Meaning"]], "Speak": [["Meaning"], ["Word", "Audio"]]},
     "Yanki - Basic": {"Card 1": [["Front"], ["Back"]]},
+    "Cloze": {"Cloze": [["Text"], ["Back Extra"]]},
 }
 
 

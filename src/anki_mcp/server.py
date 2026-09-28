@@ -51,6 +51,29 @@ def _plain(value: str, limit: int | None = PREVIEW_CHARS) -> str:
     return text
 
 
+_CLOZE_RE = re.compile(r"\{\{c\d+::(.*?)\}\}", re.DOTALL)
+_IPA_RE = re.compile(r"\(?\s*/[^/\n]+/\s*\)?")
+
+
+def _cloze_text(value: str) -> str:
+    """The words inside {{c1::...}} deletions, for TTS: hints ('::hint') and IPA ('/ˈvɪr.əl/', '(/skɔːrn/)') dropped.
+
+    '{{c1::curtail}}ed' gives 'curtail'; several deletions are joined with ', ' (repeats spoken once).
+    """
+    words: list[str] = []
+    for body in _CLOZE_RE.findall(value):
+        word = _IPA_RE.sub(" ", _plain(body.split("::")[0], None)).strip()
+        word = re.sub(r"\s+", " ", word)
+        if word and word not in words:
+            words.append(word)
+    return ", ".join(words)
+
+
+def _speech_text(value: str, cloze_only: bool) -> str:
+    value = _SOUND_RE.sub("", value)
+    return _cloze_text(value) if cloze_only else _plain(value, None)
+
+
 def _fields(note: dict, limit: int | None) -> dict[str, str]:
     ordered = sorted(note["fields"].items(), key=lambda kv: kv[1]["order"])
     return {name: _plain(f["value"], limit) for name, f in ordered}
@@ -470,10 +493,18 @@ def add_audio(
     ],
     limit: Annotated[int, Field(ge=1, le=50, description="Max notes to voice in this call; call again for the rest.")] = 20,
     dry_run: Annotated[bool, Field(description="Default True: report what would change. Set False to write.")] = True,
+    cloze_only: Annotated[
+        bool,
+        Field(
+            description="Speak only the {{c1::...}} words of text_field, not the whole field. Drops cloze hints and "
+            "IPA transcriptions ('/ˈvɪr.əl/', '(/skɔːrn/)'). Notes without a cloze are skipped. For Cloze decks."
+        ),
+    ] = False,
 ) -> dict:
     """Add pronunciation audio to EXISTING notes that don't have it yet (use add_notes' `audio` option for new notes).
 
     Skips notes whose audio_field already holds a [sound:...] tag, so it is safe to re-run until 'remaining' is 0.
+    Cloze notes: set cloze_only=True so only the hidden word is spoken (audio_field can be 'Back Extra').
     Only fills one field per note (no schema change, no full sync, review history untouched). Yanki notes are skipped.
     Workflow: dry run → voice ~5 notes and let the user listen in Anki → continue in batches.
     """
@@ -492,8 +523,8 @@ def add_audio(
             missing_fields.setdefault(n["modelName"], list(fields))
         elif _SOUND_RE.search(fields[audio_field]["value"]):
             counts["already_has_audio"] += 1
-        elif not (text := _plain(_SOUND_RE.sub("", fields[text_field]["value"]), None)):
-            counts["skipped_empty_text"] += 1
+        elif not (text := _speech_text(fields[text_field]["value"], cloze_only)):
+            counts["skipped_no_cloze" if cloze_only else "skipped_empty_text"] += 1
         else:
             if _SOUND_RE.search(fields[text_field]["value"]):
                 counts["warning_text_field_also_has_sound"] += 1

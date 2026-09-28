@@ -109,6 +109,12 @@ Your "user" is a model that only sees the tool **name, description, and input sc
 - `open_world_hint=True` on `add_notes` now, because it calls an external service.
 - **Skills can be commands.** `.claude/skills/language-cards/SKILL.md` triggers automatically, or runs as `/language-cards la cumbre, el atardecer`. `$ARGUMENTS` in the skill body receives the text after the command.
 - Hardcoding the user's conventions (deck, note type, field names, voice) in the *skill* is fine. That's personal policy. The *server* stays generic: it validates field names against Anki rather than knowing about Spanish.
+- **Cloze decks need `cloze_only`.** The stock `Cloze` note type has no audio field and the word lives mid-sentence, with IPA
+  typed inside the deletion (`{{c1::virile /ˈvɪr.əl/}}`, `{{c1::extraneous (/…/)}}`). `add_audio(cloze_only=True)` speaks only
+  the deletion text with IPA and `::hints` dropped, into `Back Extra` (no schema change). Notes without a real cloze are
+  counted as `skipped_no_cloze`; in practice those were typos (`{{c1:word}}`, one colon) that Anki doesn't hide either.
+- **An MCP server keeps running old code until reconnected** (`/mcp` → reconnect). A new tool parameter is silently ignored
+  by the old process, so the first dry run after a change must show the new behavior before writing anything.
 
 ## 4. Workflow that works
 

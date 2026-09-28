@@ -160,6 +160,27 @@ def test_add_audio_rejects_google_latin_and_explains_fields(anki):
     assert r["eligible"] == 0 and r["available_fields"] == {"Basic (and reversed card)": ["Front", "Back", "Audio"]}
 
 
+@pytest.mark.parametrize("text, expected", [
+    ("They fell silent as the {{c1::plangent}} bell pealed.", "plangent"),
+    ("The show was {{c1::curtail}}ed.", "curtail"),
+    ("healthy and {{c1::virile /ˈvɪr.əl/}}.", "virile"),
+    ("remove {{c1::extraneous (/ɪkˈstreɪ.ni.əs/)}} details", "extraneous"),
+    ("I {{c1::<b>scorn</b> /skɔːrn/}} it", "scorn"),
+    ("{{c1::fell::adj}} and {{c2::chinwag}} and {{c3::fell}}", "fell, chinwag"),
+    ("(adj.) no cloze here, and/or / slashes", ""),
+])
+def test_cloze_text_keeps_only_the_hidden_word(text, expected):
+    assert server._cloze_text(text) == expected
+
+
+def test_add_audio_cloze_only_speaks_the_cloze_word(anki):
+    anki.add("Languages::English", "Cloze", {"Text": "(adj.) strong. Healthy and {{c1::virile /ˈvɪr.əl/}}."})
+    anki.add("Languages::English", "Cloze", {"Text": "no deletion"})
+    r = add_audio('"deck:Languages::English"', "Text", "Back Extra", "en-US", cloze_only=True)
+    assert [x["text"] for x in r["would_voice"]] == ["virile"]
+    assert r["skipped_no_cloze"] == 1
+
+
 def test_add_audio_skips_yanki_notes(anki):
     r = add_audio('"deck:Go"', "Front", "Back", "es-MX")
     assert r["skipped_yanki"] == 1 and r["eligible"] == 0
