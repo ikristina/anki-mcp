@@ -21,8 +21,10 @@ extend `tests/conftest.py`'s `FakeAnki` when the server starts using a new AnkiC
 
 ## Layout
 
-- `src/anki_mcp/server.py`: the MCP tools (`list_decks`, `describe_deck`, `search_notes`, `get_notes`, `get_weak_cards`, `add_notes`, `add_audio`)
+- `src/anki_mcp/server.py`: the MCP tools (`list_decks`, `describe_deck`, `search_notes`, `get_notes`, `get_weak_cards`, `add_notes`, `add_audio`, `get_deck_profile`, `set_deck_profile`)
 - `src/anki_mcp/client.py`: AnkiConnect HTTP client and `AnkiError`
+- `src/anki_mcp/profiles.py`: deck profiles, a JSON file at `~/.config/anki-mcp/profiles.json` (`ANKI_MCP_PROFILES` overrides it; tests point it at a tmp dir)
+- `examples/profiles.json`: the maintainer's real profiles, as an example
 - `src/anki_mcp/tts.py`: free TTS engines selected by voice string: `es-MX` (Google/gTTS), `espeak:la`, `macos:Alice`
 - `tests/`: unit tests; `conftest.py` has `FakeAnki`, an in-memory AnkiConnect
 - `scripts/smoke.py`: stdio client that asserts on real tool results against the real collection
@@ -43,4 +45,5 @@ extend `tests/conftest.py`'s `FakeAnki` when the server starts using a new AnkiC
 - Decks with `source="yanki"` are generated from the user's Obsidian vault. `add_notes` must keep refusing them.
 - TTS wrappers must fail loudly on unsupported voices. Google's `la` and unknown macOS voices silently produce
   wrong audio, so they are rejected explicitly.
+- Deck-specific conventions (deck names, voices, field rules) belong in deck profiles, not in skills or server code.
 - Tool descriptions and `Field` descriptions are the model's only documentation. Update them with any behavior change.

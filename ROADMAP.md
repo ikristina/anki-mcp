@@ -29,6 +29,9 @@ This is what I did by hand when designing the language skill. As a tool, any age
 
 ## Phase 2: Deck profiles (memory)
 
+**Status: done** (`get_deck_profile`, `set_deck_profile`; `describe_deck` includes the saved profile). Not done yet:
+the cached computed part (`describe_deck` is fast enough so far) and exposing profiles as MCP resources.
+
 **Problem:** some things can't be inferred and shouldn't be re-derived every session: which TTS voice a deck uses,
 which field is spoken, conventions ("nouns include the article"), "never add audio here".
 

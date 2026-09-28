@@ -3,51 +3,43 @@ name: language-cards
 description: Add new foreign-language words or expressions to the user's Anki language decks, with pronunciation audio. Use when the user wants to add, save or learn vocabulary, a phrase or an expression in Spanish, French, Latin, Norwegian or another language, or pastes a list of words to turn into cards. Invocable as /language-cards <words...>.
 model: haiku
 effort: low
-allowed-tools: mcp__anki__list_decks, mcp__anki__describe_deck, mcp__anki__search_notes, mcp__anki__add_notes, mcp__anki__add_audio
+allowed-tools: mcp__anki__get_deck_profile, mcp__anki__set_deck_profile, mcp__anki__list_decks, mcp__anki__describe_deck, mcp__anki__search_notes, mcp__anki__add_notes, mcp__anki__add_audio
 ---
 
 # Language cards with audio
 
 Arguments (if invoked as a command): `$ARGUMENTS`. These are the words or expressions to add, and may name the language.
 
-## 1. Deck conventions (from the user's collection; do not change them)
+## 1. Deck conventions come from deck profiles
 
-| Language | Deck | Note type | Audio field | Voice |
-|---|---|---|---|---|
-| Spanish | `Languages::🇪🇸 Spanish` | `Spanish` | `Audio` | `es-MX` |
-| French | `Languages::🇫🇷 French` | `French` | `Sound` | `fr` |
-| Latin | `Languages::Latin` | `Basic (and reversed card)` (Front = Latin, Back = English) | `Audio` (templates play it with the Latin side; never put the sound tag in `Front` too, or it plays twice) | `espeak:la` (user's choice; never Google `la`, which sounds like English) |
+Don't guess a deck's format. Call `mcp__anki__get_deck_profile` (no argument) to see every saved profile, then use the
+one for the target deck: `note_type`, `audio` (field, voice, text_field), how to fill each field in `fields`, `tags`, and
+the free-form `conventions`. Follow them exactly. `mcp-added` is tagged automatically.
 
-Latin: tag `latin`, plus `duolingo` if the sentence comes from Duolingo (as existing notes do). Set `audio.text` to the Latin
-text itself, so the speech is never generated from HTML.
+No profile for the deck (or no deck for the language yet):
+1. `mcp__anki__list_decks` to find the deck, then `mcp__anki__describe_deck` to learn its note type, fields, audio field,
+   code values (e.g. WordType) and tag patterns.
+2. Propose a profile to the user (note type, audio field + voice, one line per field, tags). Ask which voice they want.
+   For Latin, only `espeak:la` works: Google's `la` is not Latin.
+3. After they confirm, save it with `mcp__anki__set_deck_profile`, then continue.
 
-Spanish and French note fields:
-- `Word`: the target-language word *with article for nouns* (`la cumbre`, `le copain`). Expressions go in as-is.
-- `Meaning`: short English meaning.
-- `WordType`: one of `N`, `V`, `Adj`, `Adv`, `Expr`, `Prep`, `Pron`, `Conj`, `Num` (French also uses `NPl`).
-- `Gender`: `m`, `f` or `m/f` for nouns; empty otherwise.
-- `SynonymAid` (optional): a synonym that helps disambiguate.
-- Leave `Word_suffix`, `Word_hint`, `Meaning_suffix`, `Meaning_hint` empty.
-- Tags: existing notes use `Spanish::Duolingo::<nn>_<Topic>` / `French::Duolingo::...`. Reuse a matching topic tag
-  if the user names one; otherwise tag `Spanish::Added` / `French::Added`. `mcp-added` is added automatically.
-
-Another language or deck: run `mcp__anki__list_decks` and `mcp__anki__search_notes` on the deck to learn its note type
-and fields, then confirm the mapping with the user before adding.
+If the user corrects a convention along the way ("nouns need the article"), offer to save it to the profile.
 
 ## 2. Workflow
 
-1. Normalize each entry: fix spelling and accents, add the article to nouns, and fill Meaning/WordType/Gender. If a word is
+1. Normalize each entry per the profile's `fields` (e.g. fix spelling and accents, articles on nouns, WordType/Gender). If a word is
    ambiguous (several meanings or genders), ask; don't guess.
 2. Call `mcp__anki__add_notes` **once** for the batch with `dry_run: true`. Duplicates show up as errors, so drop
    them and tell the user which words they already have.
-3. Show the user a compact table of what will be added (Word · Meaning · Type · Gender).
-4. Call `add_notes` again without dry_run, with `audio: {"field": <audio field>, "voice": <voice>}` on each note.
-   Audio is spoken from `Word`; set `audio.text` only if the spoken text should differ (e.g. drop the parenthetical `(fam.)`).
+3. Show the user a compact table of what will be added (one column per filled field).
+4. Call `add_notes` again without dry_run, with `audio: {"field": <profile audio.field>, "voice": <profile audio.voice>}`
+   on each note. Set `audio.text` to the plain text of the profile's `audio.text_field` when it isn't the first field,
+   or when the spoken text should differ (e.g. drop a parenthetical `(fam.)`).
 5. Report which notes were added and any that failed. An audio failure means the note was *not* added, so offer to retry.
 
 ## 3. Adding audio to existing notes
 
-Use `mcp__anki__add_audio` (not add_notes) with the deck's text field, audio field and voice from the table in section 1.
+Use `mcp__anki__add_audio` (not add_notes) with `text_field`, `audio_field` and `voice` from the deck's profile.
 Dry run first (the default), then `dry_run: false` in batches of up to 50 until `remaining` is 0. On a first run for a deck,
 voice ~5 notes and let the user listen before doing the rest.
 

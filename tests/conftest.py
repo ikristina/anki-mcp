@@ -168,8 +168,10 @@ class FakeAnki:
 
 
 @pytest.fixture
-def anki(monkeypatch):
+def anki(monkeypatch, tmp_path):
     fake = FakeAnki()
+    # Never read or write the user's real ~/.config/anki-mcp/profiles.json.
+    monkeypatch.setenv("ANKI_MCP_PROFILES", str(tmp_path / "profiles.json"))
     monkeypatch.setattr(server, "invoke", fake)
     # Deterministic, offline audio: no gTTS network calls, no eSpeak/afconvert binaries needed.
     monkeypatch.setattr(server, "synthesize", lambda text, voice: (f"anki-mcp-{abs(hash((text, voice)))}.mp3", b"ID3fake"))

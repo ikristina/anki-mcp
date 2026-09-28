@@ -1,0 +1,59 @@
+{
+  "Languages::Latin": {
+    "note_type": "Basic (and reversed card)",
+    "audio": {
+      "field": "Audio",
+      "voice": "espeak:la",
+      "text_field": "Front"
+    },
+    "fields": {
+      "Front": "Latin word or sentence",
+      "Back": "English translation"
+    },
+    "tags": ["latin"],
+    "conventions": [
+      "Also tag 'duolingo' if the sentence comes from Duolingo.",
+      "Never put the sound tag in Front too: the templates already play Audio with the Latin side.",
+      "Set audio.text to the plain Latin text so speech is never generated from HTML.",
+      "Voice is eSpeak on purpose: Google's 'la' is not Latin."
+    ]
+  },
+  "Languages::🇪🇸 Spanish": {
+    "note_type": "Spanish",
+    "audio": {
+      "field": "Audio",
+      "voice": "es-MX",
+      "text_field": "Word"
+    },
+    "fields": {
+      "Word": "Spanish word, nouns with article (la cumbre); expressions as-is",
+      "Meaning": "short English meaning",
+      "WordType": "one of N, V, Adj, Adv, Expr, Prep, Pron, Conj, Num",
+      "Gender": "m, f or m/f for nouns; empty otherwise",
+      "SynonymAid": "optional synonym that helps disambiguate"
+    },
+    "conventions": [
+      "Leave Word_suffix, Word_hint, Meaning_suffix, Meaning_hint empty.",
+      "Tag Spanish::Duolingo::<nn>_<Topic> if the user names a matching topic, otherwise Spanish::Added."
+    ]
+  },
+  "Languages::🇫🇷 French": {
+    "note_type": "French",
+    "audio": {
+      "field": "Sound",
+      "voice": "fr",
+      "text_field": "Word"
+    },
+    "fields": {
+      "Word": "French word, nouns with article (le copain); expressions as-is",
+      "Meaning": "short English meaning",
+      "WordType": "one of N, NPl, V, Adj, Adv, Expr, Prep, Pron, Conj, Num",
+      "Gender": "m, f or m/f for nouns; empty otherwise",
+      "SynonymAid": "optional synonym that helps disambiguate"
+    },
+    "conventions": [
+      "Leave Word_suffix, Word_hint, Meaning_suffix, Meaning_hint empty.",
+      "Tag French::Duolingo::<nn>_<Topic> if the user names a matching topic, otherwise French::Added."
+    ]
+  }
+}

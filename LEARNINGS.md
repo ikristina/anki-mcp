@@ -76,6 +76,18 @@ Your "user" is a model that only sees the tool **name, description, and input sc
 - **The MCP server enforces the invariant.** `add_notes` refuses Yanki-owned decks, and its error says where to go instead. This holds no matter which agent, prompt or model calls it.
 - **A skill carries the policy/workflow** (`.claude/skills/flashcards/SKILL.md`): how to route, the Yanki markdown format, and the reminder to sync. It composes two servers (`anki` + the existing `obsidian` one). There was no need to build an Obsidian writer, because a server already existed.
 - Expose facts, not only rules: `list_decks` returns `source: yanki|anki|mixed`, so the agent can decide *before* it hits an error.
+- **Data belongs in neither.** The first `language-cards` skill had a table of my decks, note types and voices. That made
+  it useless to anyone else, and I had to edit the skill whenever the collection changed. Deck profiles
+  (`get_deck_profile` / `set_deck_profile`, a JSON file) moved that data out. Now the skill holds only the workflow ("read
+  the profile, follow it; no profile → describe_deck, propose one, save after the user confirms").
+- Agent memory is just a tool that reads and writes a file. The design questions are: **who may write it**
+  (the tool description says to save only after the user confirms), **what gets validated on write**
+  (deck, note type, field names and voice are checked against Anki, so a bad profile fails at save time instead of
+  weeks later), and **where it lives** (outside the collection, so saving never triggers an Anki sync). Separate
+  *inferred* facts (`describe_deck`, recomputed each time) from *decided* ones (the profile). An inference can go stale;
+  a decision is the user's to change.
+- Tests must isolate any file the server writes: the `anki` fixture points `ANKI_MCP_PROFILES` at `tmp_path`. Otherwise
+  a test run would overwrite the real profiles.
 
 ## 3c. Adding audio (TTS) to language cards
 

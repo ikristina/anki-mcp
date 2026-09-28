@@ -17,14 +17,17 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 
+from anki_mcp import profiles
 from anki_mcp.client import AnkiError, invoke
+from anki_mcp.profiles import DeckProfile
 from anki_mcp.tts import synthesize, validate_voice
 
 mcp = MCPServer(
     "anki",
     instructions="Access to the user's local Anki flashcard collection. Call list_decks first to learn exact deck "
-    "names. Search results are previews; use get_notes for full content. When creating several cards, send them "
-    "in one add_notes call, and use dry_run=True first if unsure about deck or field names.",
+    "names. Before adding notes to a deck, call get_deck_profile and follow the user's saved conventions. Search "
+    "results are previews; use get_notes for full content. When creating several cards, send them in one add_notes "
+    "call, and use dry_run=True first if unsure about deck or field names.",
 )
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
@@ -276,6 +279,8 @@ def describe_deck(
         "notes": len(own_ids),
         "subdecks": subdecks[:30],
     }
+    if saved := profiles.load().get(deck):
+        result["profile"] = saved.model_dump(exclude_defaults=True)
     if not own_ids:
         result["hint"] = "No notes directly in this deck. Describe one of its subdecks instead." if subdecks else "Empty deck."
         return result
@@ -521,6 +526,67 @@ def add_audio(
     result.update(voiced=done, failed=failed, remaining=len(todo) - len(done))
     result["note"] = "If a note is open in Anki's browser/editor, reopen it to see the change."
     return result
+
+
+@mcp.tool(annotations=READ_ONLY)
+def get_deck_profile(
+    deck: Annotated[str | None, Field(description="Exact deck name. Omit to list every saved profile.")] = None,
+) -> dict:
+    """Read the user's saved conventions for a deck: note type, audio field + voice, how to fill each field, tags,
+    free-form rules. Call this BEFORE adding notes to a deck, and follow it. A profile is the user's decision;
+    describe_deck's inference only fills gaps it doesn't cover.
+
+    No profile yet: call describe_deck, propose a profile to the user, and save it with set_deck_profile once they confirm.
+    """
+    saved = profiles.load()
+    if deck is None:
+        return {"file": str(profiles.path()), "profiles": {d: p.model_dump(exclude_defaults=True) for d, p in saved.items()}}
+    if deck in saved:
+        return {"deck": deck, "profile": saved[deck].model_dump(exclude_defaults=True)}
+    return {
+        "deck": deck,
+        "profile": None,
+        "saved_decks": sorted(saved),
+        "hint": "No profile saved. Run describe_deck, propose a profile to the user, then set_deck_profile after they confirm.",
+    }
+
+
+@mcp.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=True, open_world_hint=False))
+def set_deck_profile(
+    deck: Annotated[str, Field(description="Exact deck name from list_decks.")],
+    profile: DeckProfile,
+    replace: Annotated[bool, Field(description="True: overwrite the whole profile. False (default): only the keys you pass change.")] = False,
+) -> dict:
+    """Save conventions for a deck so every future session (and agent) follows them. Only call after the user has
+    confirmed the values. Checked against Anki: the deck and note type must exist, audio/field names must belong to
+    the note type, and the voice must be usable. Writes a local JSON file, never the Anki collection.
+    """
+    decks = set(invoke("deckNames"))
+    if deck not in decks:
+        raise AnkiError(f"Deck '{deck}' does not exist. Similar: {_similar_decks(deck, decks) or 'none'}. Use list_decks.")
+    saved = profiles.load()
+    old = saved.get(deck)
+    merged = profile if replace or old is None else old.model_copy(update=profile.model_dump(exclude_unset=True))
+    merged = DeckProfile.model_validate(merged.model_dump())  # re-validate nested dicts from the merge
+
+    if merged.note_type:
+        try:
+            names = invoke("modelFieldNames", modelName=merged.note_type)
+        except AnkiError:
+            raise AnkiError(f"Note type '{merged.note_type}' does not exist. Use describe_deck to see the deck's note types.")
+        referenced = set(merged.fields)
+        if merged.audio:
+            referenced |= {merged.audio.field} | ({merged.audio.text_field} if merged.audio.text_field else set())
+        if unknown := sorted(referenced - set(names)):
+            raise AnkiError(f"Fields {unknown} are not in note type '{merged.note_type}'. Valid fields: {names}.")
+    elif merged.audio or merged.fields:
+        raise AnkiError("Set note_type too, so field names can be checked.")
+    if merged.audio:
+        validate_voice(merged.audio.voice)
+
+    saved[deck] = merged
+    file = profiles.save(saved)
+    return {"deck": deck, "saved": True, "file": str(file), "profile": merged.model_dump(exclude_defaults=True)}
 
 
 def main():
