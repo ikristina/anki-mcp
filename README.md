@@ -139,6 +139,14 @@ claude mcp add anki --scope user -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost
   -- uv --directory /absolute/path/to/anki-mcp run --extra otel anki-mcp
 ```
 
+To fill Grafana with data without using an agent, generate traffic. The script starts its own server with exporting on
+and makes random read-only calls, dry-run writes and a few deliberate mistakes. It never writes to the collection:
+
+```bash
+uv run --extra otel python scripts/otel_traffic.py              # 60 scenarios, about 2 minutes
+uv run --extra otel python scripts/otel_traffic.py --calls 300  # more data, for rate() and latency graphs
+```
+
 Any OTLP backend works (Jaeger, Honeycomb, Grafana Cloud…); the standard `OTEL_*` variables apply
 (`OTEL_EXPORTER_OTLP_HEADERS` for API keys, `OTEL_SERVICE_NAME`, `OTEL_SDK_DISABLED=true`). Without an endpoint, nothing is exported.
 
