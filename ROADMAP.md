@@ -112,6 +112,77 @@ with no transport or auth work. See [docs/remote-from-phone.md](docs/remote-from
   Spanish words" should produce one `add_notes` call with the right fields and gender codes, and a Yanki deck should be routed to Obsidian.
 - Compare models (Haiku vs Sonnet) on the language-cards evals to back up the `model: haiku` choice with data.
 
+## Phase 8: Retrieval (semantic search over the collection)
+
+Read-only and low risk, so it can start at any time. It is also the learning project for RAG: embeddings, a vector
+store, keeping an index fresh, hybrid search, reranking, and above all **evaluation**.
+
+**Problem:**
+- Anki's duplicate check is exact first-field text per deck and note type, so `cumbre` vs `la cumbre`, or a second card
+  on "Raft leader election" worded differently, slip through.
+- `search_notes` is keyword-only: "cards about consensus" misses notes that only say "Paxos", and "cat" doesn't find
+  "el gato".
+
+In MCP the server does **retrieval only**. The agent is the generator, so no LLM calls happen in the server.
+
+**Decisions:**
+- **Store: Redis 8** (its query engine includes vector search), in Docker with a volume and RDB persistence, next to
+  otel-lgtm. It was chosen to learn Redis vector search, and because it does vector, full-text and tag filters
+  (deck, note type) in one query, so hybrid search needs no hand-written merging.
+  - At 14k notes × 384 dims × 4 bytes ≈ 21 MB, size isn't a factor.
+  - The index is **derived data**: it can always be rebuilt from Anki, so persistence only saves re-embedding time.
+  - Keep storage behind a small interface (`upsert`, `delete`, `search`), so that sqlite-vec (one file, no server) can
+    be added later and compared on the same evals.
+- **Everything stays optional:** a `rag` extra (embedding library + Redis client), and nothing changes without it.
+  **Redis being down must never break existing tools.** The retrieval tools raise `AnkiError` with a fix-it
+  (`docker start anki-redis`), and `add_notes` skips the similarity warning and says so in a hint.
+- **Local, free embeddings**, like the TTS engines. The model must be **multilingual**, because the cards mix
+  Spanish, French, Norwegian, Latin and English. The model is chosen by eval (8.1), not upfront. Candidates:
+  multilingual-e5-small, paraphrase-multilingual-MiniLM, bge-m3. Also compare fastembed (ONNX, light) vs
+  sentence-transformers (pulls in torch).
+- **Text to embed:** plain text of the note's fields with HTML, `[sound:…]` tags, `<span class="alt">` alternatives and
+  cloze markup stripped (reuse `_plain` / `_cloze_text`). Yanki notes are included: search is read-only.
+
+**Redis layout:**
+- Key: `anki:note:<note_id>`.
+- Hash fields: `vector` (FLOAT32 bytes), `text`, `deck` (TAG), `note_type` (TAG), `mod` (NUMERIC, note modified time).
+- Index: `idx:anki_notes`, HNSW, cosine distance, plus TEXT on `text` for hybrid.
+- Key `anki:index:meta`: embedding model name, dimension, and last indexed time. **If the model changes, rebuild**:
+  vectors from different models aren't comparable.
+
+**Steps:**
+1. **8.1 Eval set and model spike (no server code).**
+   - Build 50–100 (query → expected note ids) pairs from the real collection:
+     - paraphrased questions
+     - cross-language queries ("cat" → "el gato")
+     - known near-duplicate pairs (`cumbre` / `la cumbre`)
+     - technical synonyms (consensus → Raft/Paxos)
+   - Metrics: recall@5 and MRR. Baseline: Anki keyword search.
+   - Pick the embedding model on these numbers.
+2. **8.2 Indexer.**
+   - A `scripts/index_notes.py` (or `anki-mcp-index` entry point) does the full build.
+   - Incremental updates re-embed only notes changed since the last run. Candidates: Anki's `edited:N` search term, or
+     `notesInfo`'s modified time; check which AnkiConnect exposes cheaply.
+   - Also remove notes deleted in Anki (diff the id sets).
+   - Add spans and a duration metric via `telemetry.operation`.
+3. **8.3 `find_similar_notes(text | note_id, deck=None, k=5)`**: read-only tool returning note previews with similarity
+   scores. Unit tests use a fake store, and `FakeAnki` gets whatever new search terms the indexer uses.
+4. **8.4 Near-duplicate warning in `add_notes`.**
+   - Dry-run results gain `similar: [...]` per note above a threshold tuned on the 8.1 pairs.
+   - It warns and never blocks.
+   - `language-cards` shows the warning to the user before adding.
+5. **8.5 Hybrid search.**
+   - `search_notes(semantic=True)` or a separate tool: vector + full-text in one Redis query, with an optional reranker.
+   - Keep it only if the eval shows it beats keyword-only and vector-only.
+6. **Maybe later:**
+   - Weak-card helper: retrieve related notes to explain a card you keep failing.
+   - RAG over the Obsidian vault to generate grounded cards: real chunking, and the Obsidian MCP server as the source.
+
+**Open questions:**
+- Where the eval set lives. It quotes real note contents; `examples/profiles.json` is already public, but notes are more
+  personal. Maybe keep it in the repo with ids and short texts, or gitignore it.
+- Whether indexing runs on server start (incremental, capped), on demand (tool), or only from the script.
+
 ## Later / maybe
 
 - PyPI release under a distinct name (`anki-mcp` is taken).
