@@ -127,6 +127,31 @@ the relevant `SKILL.md` body into that agent's rules/instructions file. Deck-spe
 - `ANKI_CONNECT_URL`, if AnkiConnect isn't on `http://127.0.0.1:8765`
   (`claude mcp add anki -e ANKI_CONNECT_URL=http://... -- ...`).
 
+### Observability (optional): OpenTelemetry traces, metrics and logs
+
+The server always logs to stderr (Claude Code keeps it in its MCP logs; `ANKI_MCP_LOG_LEVEL=DEBUG` for more). To export
+traces, metrics and logs over OTLP/HTTP, install the `otel` extra and point it at a collector. The quickest local backend
+is Grafana's all-in-one image, which stores all three signals and has a UI at http://localhost:3000:
+
+```bash
+docker run -d --name otel-lgtm -p 3000:3000 -p 4318:4318 grafana/otel-lgtm
+claude mcp add anki --scope user -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+  -- uv --directory /absolute/path/to/anki-mcp run --extra otel anki-mcp
+```
+
+Any OTLP backend works (Jaeger, Honeycomb, Grafana Cloud…); the standard `OTEL_*` variables apply
+(`OTEL_EXPORTER_OTLP_HEADERS` for API keys, `OTEL_SERVICE_NAME`, `OTEL_SDK_DISABLED=true`). Without an endpoint, nothing is exported.
+
+- **Traces**: one span per tool call (`tools/call add_notes`, from the MCP SDK), with child spans per AnkiConnect
+  request (`ankiconnect findNotes`) and per audio clip (`tts google`). Failed calls carry the error message the model saw.
+- **Metrics**: `anki_mcp.tool.calls` / `anki_mcp.tool.duration` (by tool and outcome), `anki_mcp.ankiconnect.duration`
+  (by action), `anki_mcp.tts.duration` (by engine and voice; Google 429s show up here), `anki_mcp.notes.written` (by
+  operation and deck). Exported every 10s (`OTEL_METRIC_EXPORT_INTERVAL`).
+- **Logs**: writes (notes added, voiced, updated, synced) and tool errors.
+
+Note contents are never recorded, but error messages can quote the word being voiced. Queries, troubleshooting, and how
+to add the same to your own MCP server: [docs/observability.md](docs/observability.md).
+
 ### Obsidian (optional, for Yanki decks)
 
 This server never reads or writes Obsidian. It only spots Yanki decks (`source: yanki`) and refuses to add cards to

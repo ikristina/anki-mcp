@@ -10,8 +10,18 @@ dependencies = ["mcp>=2.2,<3", "gtts>=2.5"]
 [project.scripts]
 anki-mcp = "anki_mcp.server:main"
 
+[project.optional-dependencies]
+otel = [
+    "opentelemetry-exporter-otlp-proto-http>=1.28",
+    "opentelemetry-sdk>=1.28",
+]
+
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+    "opentelemetry-exporter-otlp-proto-http>=1.28",
+    "opentelemetry-sdk>=1.28",
+    "pytest>=8",
+]
 
 [build-system]
 requires = ["hatchling"]

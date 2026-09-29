@@ -17,9 +17,10 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 
-from anki_mcp import profiles
+from anki_mcp import profiles, telemetry
 from anki_mcp.client import AnkiError, invoke
 from anki_mcp.profiles import DeckProfile
+from anki_mcp.telemetry import log, notes_written
 from anki_mcp.tts import synthesize, validate_voice
 
 mcp = MCPServer(
@@ -28,6 +29,7 @@ mcp = MCPServer(
     "names. Before adding notes to a deck, call get_deck_profile and follow the user's saved conventions. Search "
     "results are previews; use get_notes for full content. When creating several cards, send them in one add_notes "
     "call, and use dry_run=True first if unsure about deck or field names.",
+    middleware=[telemetry.ToolMetrics()],
 )
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
@@ -526,6 +528,10 @@ def add_notes(
                 results[i] = {"index": i, "status": "added", "note_id": nid} if nid else {"index": i, "status": "error", "error": "Anki rejected the note."}
 
     summary = {s: sum(r["status"] == s for r in results) for s in ("added", "valid", "error")}
+    if added := Counter(notes[i].deck for i, r in enumerate(results) if r["status"] == "added"):
+        for deck, n in added.items():
+            notes_written.add(n, {"operation": "add", "anki.deck": deck})
+        log.info("added %d notes: %s", summary["added"], dict(added))
     return {"dry_run": dry_run, "summary": summary, "results": results}
 
 
@@ -605,6 +611,8 @@ def add_audio(
             if "not installed" in str(e) or "Unknown TTS" in str(e) or "no real" in str(e):
                 break  # the voice itself is unusable; don't repeat the same error for every note
     result.update(voiced=done, failed=failed, remaining=len(todo) - len(done))
+    notes_written.add(len(done), {"operation": "audio", "tts.voice": voice})
+    log.info("voiced %d notes with %s (%d failed, %d remaining)", len(done), voice, len(failed), result["remaining"])
     result["note"] = "If a note is open in Anki's browser/editor, reopen it to see the change."
     return result
 
@@ -673,6 +681,8 @@ def update_notes(
             if new:
                 invoke("updateNoteFields", note={"id": nid, "fields": new})
             invoke("addTags", notes=[nid], tags=" ".join([*tags, EDITED_TAG]))
+        notes_written.add(len(apply), {"operation": "update"})
+        log.info("updated %d notes", len(apply))
     summary = Counter(r["status"] for r in results)
     out = {"dry_run": dry_run, "summary": dict(summary), "results": results}
     if not dry_run and apply:
@@ -714,6 +724,7 @@ def sync() -> dict:
                 "writes here stay on this computer and won't reach the phone, so tell the user before making any."
             ) from e
         raise
+    log.info("synced with AnkiWeb")
     return {"synced": True, "media": "transfers in the background; wait about a minute, then sync the phone"}
 
 
@@ -779,6 +790,7 @@ def set_deck_profile(
 
 
 def main():
+    telemetry.setup()
     mcp.run()
 
 

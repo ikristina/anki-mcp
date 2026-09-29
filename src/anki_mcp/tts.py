@@ -18,6 +18,7 @@ from gtts import gTTS
 from gtts.lang import tts_langs
 
 from anki_mcp.client import AnkiError
+from anki_mcp.telemetry import operation, tts_duration
 
 # Region -> Google Translate top-level domain, which selects the accent.
 _REGION_TLD = {
@@ -49,17 +50,19 @@ def validate_voice(voice: str) -> None:
 def synthesize(text: str, voice: str) -> tuple[str, bytes]:
     """Return (filename, audio bytes) for text spoken by voice. Raises AnkiError with a fix-it message."""
     engine, _, name = voice.partition(":") if ":" in voice else ("google", "", voice)
-    try:
-        if engine == "google":
-            data, ext = _google(text, name), "mp3"
-        elif engine == "espeak":
-            data, ext = _to_m4a(_espeak_wav(text, name), ".wav"), "m4a"
-        elif engine == "macos":
-            data, ext = _to_m4a(_say_aiff(text, name), ".aiff"), "m4a"
-        else:
-            raise AnkiError(f"Unknown TTS engine '{engine}'. Use 'es-MX' (Google), 'espeak:la' or 'macos:Alice'.")
-    except subprocess.CalledProcessError as e:
-        raise AnkiError(f"{engine} TTS failed for {text!r}: {e.stderr.decode(errors='replace').strip() or e}") from e
+    with operation(f"tts {engine}", tts_duration, {"tts.engine": engine, "tts.voice": voice}) as span:
+        try:
+            if engine == "google":
+                data, ext = _google(text, name), "mp3"
+            elif engine == "espeak":
+                data, ext = _to_m4a(_espeak_wav(text, name), ".wav"), "m4a"
+            elif engine == "macos":
+                data, ext = _to_m4a(_say_aiff(text, name), ".aiff"), "m4a"
+            else:
+                raise AnkiError(f"Unknown TTS engine '{engine}'. Use 'es-MX' (Google), 'espeak:la' or 'macos:Alice'.")
+        except subprocess.CalledProcessError as e:
+            raise AnkiError(f"{engine} TTS failed for {text!r}: {e.stderr.decode(errors='replace').strip() or e}") from e
+        span.set_attribute("tts.audio_bytes", len(data))
     digest = hashlib.sha224(f"{voice}|{text}".encode()).hexdigest()
     return f"anki-mcp-{digest}.{ext}", data
 

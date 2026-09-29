@@ -25,12 +25,15 @@ extend `tests/conftest.py`'s `FakeAnki` when the server starts using a new AnkiC
 - `src/anki_mcp/client.py`: AnkiConnect HTTP client and `AnkiError`
 - `src/anki_mcp/profiles.py`: deck profiles, a JSON file at `~/.config/anki-mcp/profiles.json` (`ANKI_MCP_PROFILES` overrides it; tests point it at a tmp dir)
 - `examples/profiles.json`: the maintainer's real profiles, as an example
+- `src/anki_mcp/telemetry.py`: OpenTelemetry spans, metrics and logs (API-only, no-op until `setup()` finds an OTLP endpoint; SDK/exporter in the `otel` extra)
 - `src/anki_mcp/tts.py`: free TTS engines selected by voice string: `es-MX` (Google/gTTS), `espeak:la`, `macos:Alice`
 - `tests/`: unit tests; `conftest.py` has `FakeAnki`, an in-memory AnkiConnect
 - `scripts/smoke.py`: stdio client that asserts on real tool results against the real collection
+- `scripts/otel_traffic.py`: random read-only/dry-run tool traffic with OTLP export on, to fill Grafana (see docs/observability.md)
 - `.claude/skills/`: `flashcards` (routes technical cards to Obsidian/Yanki) and `language-cards` (vocab + audio)
 - `LEARNINGS.md`: design notes and gotchas. **Append to it** whenever you learn something non-obvious.
 - `docs/remote-from-phone.md`: using the server from a phone via Claude Code Remote Control (Mac setup + daily flow)
+- `docs/observability.md`: OpenTelemetry how-to (viewing anki-mcp's telemetry; adding OTel to any MCP server)
 - `ROADMAP.md`: planned headless / AnkiWeb-sync work
 
 ## Rules

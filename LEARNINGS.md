@@ -194,6 +194,24 @@ Your "user" is a model that only sees the tool **name, description, and input sc
 - Skills (SKILL.md) are less portable than servers. Put *capabilities* in the server and *personal policy* in the skill,
   so other people get the useful part.
 
+## 6c. Observability (OpenTelemetry)
+
+- **MCP Python SDK 2.x already emits traces.** `OpenTelemetryMiddleware` is on by default and opens a SERVER span per
+  request (`tools/call <tool>`, with `gen_ai.tool.name`), and it continues W3C trace context from `_meta`. It uses only
+  `opentelemetry-api`, so it does nothing until someone installs an SDK provider. Our spans nest under it.
+- **Write instrumentation against the API, and configure the SDK only in `main()`.** Then the instrumentation costs nothing in
+  tests and default installs, and the SDK/exporters can be an optional extra. `get_tracer`/`get_meter` at import time
+  return proxies that pick up the real provider later.
+- **Tool errors don't reach middleware as exceptions.** An `AnkiError` becomes a `CallToolResult(isError=True)` (as a wire
+  dict by the time middleware sees it), so outcome detection has to inspect the result, like the SDK's own middleware does.
+- **Add user middleware with `MCPServer(middleware=[...])`.** It runs inside the SDK's OTel middleware, so
+  `trace.get_current_span()` there is the `tools/call` span, and deck names can be added to it.
+- **stdio servers get SIGTERMed, and SIGTERM skips atexit**, so the batched spans/logs and the last metrics were lost.
+  `setup()` installs a SIGTERM handler that shuts the providers down (which flushes them). Metrics export every 10s rather than the default 60s.
+- **Tests:** the global providers can be set only once per process, so `test_telemetry.py` installs in-memory ones once,
+  with *delta* metric temporality so each test sees only its own points. The real OTLP wiring is tested in a subprocess
+  against a fake HTTP receiver, which also asserts that stdout stays empty.
+
 ## 7. Glossary
 
 - **Host**: the app running the model (Claude Code). **Client**: the host's connection to one server. **Server**: your program.
