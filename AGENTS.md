@@ -21,7 +21,7 @@ extend `tests/conftest.py`'s `FakeAnki` when the server starts using a new AnkiC
 
 ## Layout
 
-- `src/anki_mcp/server.py`: the MCP tools (`list_decks`, `describe_deck`, `list_note_types`, `search_notes`, `get_notes`, `get_weak_cards`, `add_notes`, `add_audio`, `update_notes`, `get_deck_profile`, `set_deck_profile`)
+- `src/anki_mcp/server.py`: the MCP tools (`list_decks`, `describe_deck`, `list_note_types`, `search_notes`, `get_notes`, `get_weak_cards`, `add_notes`, `add_audio`, `update_notes`, `sync`, `get_deck_profile`, `set_deck_profile`)
 - `src/anki_mcp/client.py`: AnkiConnect HTTP client and `AnkiError`
 - `src/anki_mcp/profiles.py`: deck profiles, a JSON file at `~/.config/anki-mcp/profiles.json` (`ANKI_MCP_PROFILES` overrides it; tests point it at a tmp dir)
 - `examples/profiles.json`: the maintainer's real profiles, as an example
@@ -30,6 +30,7 @@ extend `tests/conftest.py`'s `FakeAnki` when the server starts using a new AnkiC
 - `scripts/smoke.py`: stdio client that asserts on real tool results against the real collection
 - `.claude/skills/`: `flashcards` (routes technical cards to Obsidian/Yanki) and `language-cards` (vocab + audio)
 - `LEARNINGS.md`: design notes and gotchas. **Append to it** whenever you learn something non-obvious.
+- `docs/remote-from-phone.md`: using the server from a phone via Claude Code Remote Control (Mac setup + daily flow)
 - `ROADMAP.md`: planned headless / AnkiWeb-sync work
 
 ## Rules

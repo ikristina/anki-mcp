@@ -3,7 +3,7 @@ import pytest
 from anki_mcp import server
 from anki_mcp.client import AnkiError
 from anki_mcp.server import (AudioSpec, NoteInput, NoteUpdate, add_audio, add_notes, describe_deck, get_notes, get_weak_cards, list_decks,
-                             list_note_types, search_notes, update_notes)
+                             list_note_types, search_notes, sync, update_notes)
 
 SPANISH = {"deck": "Languages::Spanish", "note_type": "Spanish"}
 LATIN_Q = '"deck:Languages::Latin"'
@@ -265,3 +265,24 @@ def test_update_notes_refusals(anki):
     assert "not found" in errors[3]
     assert r["results"][4]["status"] == "updated"  # keeping the [sound:] tag is fine
     assert anki.notes[yanki]["fields"]["Back"] == "Pipes."
+
+
+# --- sync --------------------------------------------------------------------------------------------------------
+
+def test_sync_normal(anki):
+    assert sync()["synced"] is True
+    assert anki.calls == ["sync"]
+
+
+@pytest.mark.parametrize("status, reason", [(2, "can't be merged"), (3, "download everything"), (4, "upload everything")])
+def test_sync_refuses_full_sync_with_a_readable_reason(anki, status, reason):
+    anki.sync_error = f"Sync status {status} not one of [0, 1] - see SyncCollectionResponse.ChangesRequired"
+    with pytest.raises(AnkiError, match=reason) as e:
+        sync()
+    assert "choose which side to keep" in str(e.value)
+
+
+def test_sync_without_ankiweb_login_says_what_to_do(anki):
+    anki.sync_error = "sync: auth not configured"
+    with pytest.raises(AnkiError, match="log in"):
+        sync()

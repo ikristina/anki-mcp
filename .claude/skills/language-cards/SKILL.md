@@ -3,7 +3,7 @@ name: language-cards
 description: Add new foreign-language words or expressions to the user's Anki language decks, with pronunciation audio. Use when the user wants to add, save or learn vocabulary, a phrase or an expression in Spanish, French, Latin, Norwegian or another language, or pastes a list of words to turn into cards. Also tidies notes the user typed on their phone (fix text, add audio). Invocable as /language-cards <words...>.
 model: haiku
 effort: low
-allowed-tools: mcp__anki__get_deck_profile, mcp__anki__set_deck_profile, mcp__anki__list_decks, mcp__anki__describe_deck, mcp__anki__list_note_types, mcp__anki__search_notes, mcp__anki__get_notes, mcp__anki__add_notes, mcp__anki__add_audio, mcp__anki__update_notes
+allowed-tools: mcp__anki__get_deck_profile, mcp__anki__set_deck_profile, mcp__anki__list_decks, mcp__anki__describe_deck, mcp__anki__list_note_types, mcp__anki__search_notes, mcp__anki__get_notes, mcp__anki__add_notes, mcp__anki__add_audio, mcp__anki__update_notes, mcp__anki__sync
 ---
 
 # Language cards with audio
@@ -48,8 +48,10 @@ voice ~5 notes and let the user listen before doing the rest.
 ## 3b. Tidying notes the user added on their phone
 
 Triggered by "tidy / fix up / add audio to the cards I added on my phone" (optionally naming a deck). The user must have
-synced the phone and then the desktop first. If nothing new shows up, remind them.
+synced the phone first. If nothing new shows up, remind them.
 
+0. Call `mcp__anki__sync` so the desktop pulls the phone's notes. If it reports that a full sync is needed, stop and
+   tell the user: changes made now would not reach the phone.
 1. Find them: `search_notes` with `"deck:<deck>" -tag:mcp-added -tag:mcp-edited`. Use `added:14` or similar to narrow it
    if the user gives a time frame.
 2. Read them with `get_notes(raw=True)`. Raw values keep HTML and `[sound:]` tags that `update_notes` must not lose.
@@ -64,7 +66,8 @@ synced the phone and then the desktop first. If nothing new shows up, remind the
    old → new table, then call it again with `dry_run: false` once they agree.
 5. Then add audio (section 3) with the same search. Fix the text *before* adding audio, so the audio speaks the corrected
    text. Alternative answers in `<span class="alt">` are never spoken.
-6. Tell the user to sync so the phone gets the changes.
+6. Call `mcp__anki__sync` again, then tell the user to wait about a minute (audio uploads in the background) and sync
+   the phone.
 
 ## 4. Notes
 

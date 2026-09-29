@@ -74,6 +74,9 @@ That's a regular field update, so no full sync is needed.
 
 ## Phase 4: Remote MCP (Streamable HTTP + auth), still on AnkiConnect
 
+**Stopgap, done:** the `sync` tool plus Claude Code Remote Control already give phone access with the Mac running,
+with no transport or auth work. See [docs/remote-from-phone.md](docs/remote-from-phone.md).
+
 - Add the **Streamable HTTP** transport. (The old SSE transport is deprecated in the MCP spec, so don't build it.)
 - **Authentication is mandatory**: this server can read and write the collection. Use OAuth, which Claude's custom connectors
   expect, or at least a bearer token for personal use.

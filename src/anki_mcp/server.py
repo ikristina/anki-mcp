@@ -680,6 +680,43 @@ def update_notes(
     return out
 
 
+_SYNC_STATUS_RE = re.compile(r"Sync status (\d+) not one of")
+# SyncCollectionResponse.ChangesRequired in Anki's sync.proto; AnkiConnect refuses everything but 0 and 1 (normal sync).
+_FULL_SYNC_REASONS = {
+    2: "the collection changed on both sides in a way that can't be merged, usually a note type or field edit",
+    3: "this computer's collection is empty, so it would download everything from AnkiWeb",
+    4: "AnkiWeb is empty, so this computer would upload everything",
+}
+
+
+@mcp.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=True, open_world_hint=True))
+def sync() -> dict:
+    """Sync the desktop collection with AnkiWeb, like pressing Sync in Anki.
+
+    Call it before looking for notes the user added on another device (phone, iPad): the desktop doesn't see them
+    until it syncs. Call it again after writing, so the other devices get the changes. Media (audio files) transfers
+    in the background and can take a minute after this returns; the user should then sync their phone.
+
+    Only normal (merging) syncs run. If AnkiWeb needs a full sync, which overwrites one side, nothing is changed and
+    the error explains why: only the user can choose which side to keep, in desktop Anki.
+    """
+    try:
+        invoke("sync", timeout=120)
+    except AnkiError as e:
+        msg = str(e)
+        if "auth not configured" in msg:
+            raise AnkiError("Desktop Anki is not logged in to AnkiWeb. Ask the user to click Sync in desktop Anki and log in once.") from e
+        if m := _SYNC_STATUS_RE.search(msg):
+            reason = _FULL_SYNC_REASONS.get(int(m.group(1)), f"sync status {m.group(1)}")
+            raise AnkiError(
+                f"Not synced: AnkiWeb needs a full sync ({reason}). A full sync overwrites one side, so it was not started "
+                "and nothing changed. The user must click Sync in desktop Anki and choose which side to keep. Until then, "
+                "writes here stay on this computer and won't reach the phone, so tell the user before making any."
+            ) from e
+        raise
+    return {"synced": True, "media": "transfers in the background; wait about a minute, then sync the phone"}
+
+
 @mcp.tool(annotations=READ_ONLY)
 def get_deck_profile(
     deck: Annotated[str | None, Field(description="Exact deck name. Omit to list every saved profile.")] = None,

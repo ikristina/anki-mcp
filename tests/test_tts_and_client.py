@@ -39,6 +39,14 @@ def test_unreachable_anki_says_what_to_do(monkeypatch):
         client.invoke("version")
 
 
+def test_slow_anki_says_to_check_for_a_dialog(monkeypatch):
+    def hang(req, timeout):
+        raise TimeoutError("timed out")
+    monkeypatch.setattr(client.urllib.request, "urlopen", hang)
+    with pytest.raises(AnkiError, match="within 5s.*dialog"):
+        client.invoke("sync", timeout=5)
+
+
 def test_error_is_a_tool_error():
     # Only ToolError messages reach the model in MCP SDK 2.x; anything else becomes "Error executing tool".
     from mcp.server.mcpserver.exceptions import ToolError

@@ -36,6 +36,7 @@ class FakeAnki:
         self.notes: dict[int, dict] = {}
         self.media: dict[str, str] = {}
         self.calls: list[str] = []
+        self.sync_error: str | None = None  # e.g. "Sync status 2 not one of [0, 1]", as real AnkiConnect words it
         self._next_id = 1000
         for word, meaning, wt, g in [("la cumbre", "peak", "N", "f"), ("el perro", "dog", "N", "m"),
                                      ("correr", "to run", "V", ""), ("rápido", "fast", "Adj", ""),
@@ -100,6 +101,7 @@ class FakeAnki:
     # --- AnkiConnect actions -------------------------------------------------------------------------------------
     def __call__(self, action, **p):
         self.calls.append(action)
+        p.pop("timeout", None)  # client option, not an AnkiConnect param
         handler = getattr(self, "a_" + action, None)
         if handler is None:
             raise AssertionError(f"FakeAnki doesn't implement action {action!r}")
@@ -175,6 +177,11 @@ class FakeAnki:
     def a_addTags(self, notes, tags):
         for nid in notes:
             self.notes[nid]["tags"] += [t for t in tags.split() if t not in self.notes[nid]["tags"]]
+        return None
+
+    def a_sync(self):
+        if self.sync_error:
+            raise AnkiError(f"AnkiConnect error on 'sync': {self.sync_error}")
         return None
 
 
