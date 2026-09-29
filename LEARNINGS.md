@@ -138,6 +138,15 @@ Your "user" is a model that only sees the tool **name, description, and input sc
   `<script>window.alwaysShowInfo = true;</script>` at the top of each back template (`window.flipDelay = <s>` only lengthens the wait).
   `#error loading answer!` in Preview is expected: the back reads the answer from `sessionStorage`, and Preview never sets it.
   The Memrise add-on (884199977) breaks the editor on Anki 26.09 (`NewEditor` has no `.note`), but the templates work without it.
+- **Tapping cards tested little, so the Spanish deck moved to multiple choice, and decoys are the whole card.** With
+  Choices empty, tapping tiles are only the answer's own words: a one-word note is a single tile, and a sentence only
+  tests word order. The Lτ MultipleChoice+Typing preset is a drop-in swap with the same fields (the first is `Learnable`,
+  not `Learnable Sentence`) and the same card order. Its front is wrapped in `{{#Choices}}`, so a note with no decoys
+  gets a **blank** card. It shows 6 options (`window.mchOptionsN`, default 6), meaning 5 decoys, split on `|`, and the
+  answer is left out of Choices. Choosing the right option only tests something when the decoys are near-misses (wrong person,
+  ser/estar, a swapped season). It's broken when a decoy is also correct: "you" in the English makes
+  `tú`/`ustedes`/`usted` all valid, so those swaps are banned in the deck profile. Changing the note type is a schema
+  change and forces a full sync, so the Choices were filled on the old note type first (the field carries over).
 - **An edit tool needs a raw read path.** `get_notes` strips HTML to keep results small, so a model editing from it would
   quietly erase `<b>`, alt spans and `[sound:]` tags. `update_notes` therefore comes with `get_notes(raw=True)`, only
   changes the fields it is given, and refuses any edit that drops a `[sound:]` tag. It is a dry run by default, like `add_audio`.
