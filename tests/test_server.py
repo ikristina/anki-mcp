@@ -27,11 +27,16 @@ def test_similar_decks_handles_typos_and_substrings(typo, expected):
 
 
 def test_source_labels():
-    yanki = {"Go": 11, "Languages::Latin": 2}
-    assert server._source("Go", 11, yanki) == "yanki"
-    assert server._source("Languages::Latin", 464, yanki) == "mixed"  # a few stray Yanki notes don't make it Yanki-owned
-    assert server._source("Languages", 0, yanki) == "mixed"  # parent of a Yanki subdeck
-    assert server._source("Languages::Spanish", 100, yanki) == "anki"
+    yanki = {"Go": 11, "Languages::Latin": 2, "DDIA::03_Replication": 15, "DDIA::04_Transactions": 15}
+    own = {"Go": 11, "Languages": 0, "Languages::Latin": 464, "Languages::Spanish": 100,
+           "DDIA": 0, "DDIA::03_Replication": 15, "DDIA::04_Transactions": 15}
+    assert server._source("Go", own, yanki) == "yanki"
+    assert server._source("Languages::Latin", own, yanki) == "mixed"  # a few stray Yanki notes don't make it Yanki-owned
+    assert server._source("Languages", own, yanki) == "mixed"  # parent of a Yanki subdeck, but Latin holds native cards
+    assert server._source("Languages::Spanish", own, yanki) == "anki"
+    assert server._source("DDIA", own, yanki) == "yanki"  # no own cards, every subdeck from Obsidian
+    assert server._source("DDIA", {**own, "DDIA": 1}, yanki) == "mixed"  # a native card of its own: add_notes stays open
+    assert server._source("DDIA", {**own, "DDIA::Notes": 3}, yanki) == "mixed"  # a native subdeck
 
 
 def test_audio_source_from_filename():
@@ -45,7 +50,7 @@ def test_audio_source_from_filename():
 def test_list_decks_reports_full_names_and_sources(anki):
     decks = {d["deck"]: d for d in list_decks()}
     assert decks["DDIA::04_Transactions"]["source"] == "yanki"  # full path, not getDeckStats' leaf name
-    assert decks["DDIA"]["source"] == "mixed"
+    assert decks["DDIA"]["source"] == "yanki"  # only Yanki subdecks
     assert decks["Languages::Spanish"]["source"] == "anki"
     assert decks["Languages::Spanish"]["own_cards"] == 6
 
@@ -342,3 +347,11 @@ def test_note_type_differing_from_profile_warns_but_is_used(anki):
 def test_no_profile_means_basic_and_no_notice(anki):
     out = add_notes([NoteInput(deck="Default", fields={"Front": "q", "Back": "a"})], dry_run=True)
     assert out["results"][0] == {"index": 0, "status": "valid"}
+
+
+def test_add_notes_refuses_a_parent_made_only_of_yanki_subdecks(anki):
+    # An eval run put a Kafka card in DDIA this way: outside every chapter subdeck and outside the vault.
+    out = add_notes([NoteInput(deck="DDIA", fields={"Front": "Kafka consumer groups?", "Back": "One consumer per partition."})])
+    assert out["summary"]["error"] == 1 and "Obsidian vault" in out["results"][0]["error"]
+    assert "addNotes" not in anki.calls
+    assert describe_deck("DDIA")["source"] == "yanki"

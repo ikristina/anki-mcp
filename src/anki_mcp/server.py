@@ -124,14 +124,26 @@ def _yanki_counts() -> dict[str, int]:
     return {deck: len(ids) for deck, ids in invoke("getDecks", cards=cards).items()} if cards else {}
 
 
-def _source(deck: str, own_cards: int, yanki: dict[str, int]) -> str:
-    """'yanki' if every own card comes from Yanki, 'mixed' if some do (or only subdecks do), else 'anki'."""
-    n = yanki.get(deck, 0)
-    if n and n == own_cards:
+def _source(deck: str, own: dict[str, int], yanki: dict[str, int]) -> str:
+    """'yanki' if every own card comes from Yanki, or if the deck has no cards of its own and every card in its
+    subdecks does (a parent like DDIA whose chapters are all in Obsidian). 'mixed' if some do, else 'anki'.
+
+    `own` maps deck -> own card count, for the deck and its subdecks.
+    """
+    n, mine = yanki.get(deck, 0), own.get(deck, 0)
+    if n and n == mine:
+        return "yanki"
+    subs = [d for d in own if d.startswith(deck + "::")]
+    # An eval run added a Kafka card to DDIA (0 own cards, 7 Yanki subdecks): it would sit outside every chapter and the vault.
+    if not mine and any(yanki.get(d) for d in subs) and all(own[d] == yanki.get(d, 0) for d in subs):
         return "yanki"
     if n or any(y.startswith(deck + "::") for y in yanki):
         return "mixed"
     return "anki"
+
+
+def _with_subdecks(targets, decks) -> list[str]:
+    return sorted(d for d in decks if any(d == t or d.startswith(t + "::") for t in targets))
 
 
 def _own_card_counts(decks: list[str]) -> dict[str, int]:
@@ -145,7 +157,8 @@ def list_decks() -> list[dict]:
     """List all Anki decks with card counts (new / learning / due for review / own cards) and source.
 
     source='yanki': generated from markdown in the user's Obsidian vault by the Yanki plugin. Read and quiz
-    freely, but new cards must be written in Obsidian, not added here.
+    freely, but new cards must be written in Obsidian, not added here. A parent deck with no cards of its own whose
+    subdecks are all Yanki (e.g. 'DDIA') is 'yanki' too: write the card in the right subdeck's vault folder.
     source='anki': native deck, accepts add_notes.
     source='mixed': holds both kinds (or its subdecks do). add_notes works; prefer Obsidian for technical topics.
     Subdecks use '::' as the separator, e.g. 'DDIA::04_Transactions'. Counts include subdecks except 'own_cards'.
@@ -153,11 +166,12 @@ def list_decks() -> list[dict]:
     names = {str(i): n for n, i in invoke("deckNamesAndIds").items()}
     stats = invoke("getDeckStats", decks=list(names.values()))  # keyed by id; its "name" is only the leaf
     yanki = _yanki_counts()
+    own = {names[i]: s["total_in_deck"] for i, s in stats.items()}
     return sorted(
         (
             {
                 "deck": names[deck_id],
-                "source": _source(names[deck_id], s["total_in_deck"], yanki),
+                "source": _source(names[deck_id], own, yanki),
                 "new": s["new_count"],
                 "learning": s["learn_count"],
                 "due": s["review_count"],
@@ -312,10 +326,9 @@ def describe_deck(
         raise AnkiError(f"Deck '{deck}' does not exist. Similar: {_similar_decks(deck, decks) or 'none'}. Use list_decks.")
     subdecks = sorted(d for d in decks if d.startswith(deck + "::"))
     own_ids = invoke("findNotes", query=f"{_deck_term(deck)} -{_deck_term(deck, children=True)}")
-    own_cards = _own_card_counts([deck]).get(deck, 0)
     result: dict = {
         "deck": deck,
-        "source": _source(deck, own_cards, _yanki_counts()),
+        "source": _source(deck, _own_card_counts(_with_subdecks([deck], decks)), _yanki_counts()),
         "notes": len(own_ids),
         "subdecks": subdecks[:30],
     }
@@ -507,7 +520,7 @@ def add_notes(
     """
     decks = set(invoke("deckNames"))
     yanki = _yanki_counts()
-    own = _own_card_counts(sorted({n.deck for n in notes} & decks))
+    own = _own_card_counts(_with_subdecks({n.deck for n in notes} & decks, decks))
     field_cache: dict[str, list[str]] = {}
     results: list[dict] = [{} for _ in notes]
     candidates: list[tuple[int, dict]] = []
@@ -518,7 +531,7 @@ def add_notes(
             near = _similar_decks(note.deck, decks)
             results[i] = {"index": i, "status": "error", "error": f"Deck '{note.deck}' does not exist. Similar: {near or 'none'}. Use list_decks."}
             continue
-        if _source(note.deck, own.get(note.deck, 0), yanki) == "yanki":
+        if _source(note.deck, own, yanki) == "yanki":
             results[i] = {
                 "index": i,
                 "status": "error",
