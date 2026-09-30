@@ -1,8 +1,9 @@
-"""Free text-to-speech. Three engines, chosen by the voice string:
+"""Free text-to-speech. Four engines, chosen by the voice string:
 
 - 'es-MX', 'fr', ...   Google Translate voices via gTTS (online). The same voices HyperTTS's GoogleTranslate uses.
 - 'espeak:la'          eSpeak NG (offline, robotic, but has real rules for languages Google lacks, e.g. Latin).
 - 'macos:Alice'        A macOS `say` voice (offline, natural). Run `say -v '?'` to list them.
+- 'piper:la_LA-vox-medium'  A Piper neural voice (offline, natural): <name>.onnx + .onnx.json in PIPER_VOICES.
 """
 
 import hashlib
@@ -20,6 +21,7 @@ from gtts.lang import tts_langs
 from anki_mcp.client import AnkiError
 from anki_mcp.telemetry import operation, tts_duration
 
+PIPER_VOICES = Path("~/.local/share/piper-voices").expanduser()
 # Region -> Google Translate top-level domain, which selects the accent.
 _REGION_TLD = {
     "MX": "com.mx", "ES": "es", "US": "us", "GB": "co.uk", "AU": "com.au", "IN": "co.in",
@@ -43,8 +45,10 @@ def validate_voice(voice: str) -> None:
             raise AnkiError(f"eSpeak has no '{name}' voice. List them with `espeak-ng --voices`.")
     elif engine == "macos":
         _check_macos_voice(name)
+    elif engine == "piper":
+        _piper_model(name)
     else:
-        raise AnkiError(f"Unknown TTS engine '{engine}'. Use 'es-MX' (Google), 'espeak:la' or 'macos:Alice'.")
+        raise AnkiError(f"Unknown TTS engine '{engine}'. Use 'es-MX' (Google), 'espeak:la', 'macos:Alice' or 'piper:<voice>'.")
 
 
 def synthesize(text: str, voice: str) -> tuple[str, bytes]:
@@ -58,8 +62,10 @@ def synthesize(text: str, voice: str) -> tuple[str, bytes]:
                 data, ext = _to_m4a(_espeak_wav(text, name), ".wav"), "m4a"
             elif engine == "macos":
                 data, ext = _to_m4a(_say_aiff(text, name), ".aiff"), "m4a"
+            elif engine == "piper":
+                data, ext = _to_m4a(_piper_wav(text, name), ".wav"), "m4a"
             else:
-                raise AnkiError(f"Unknown TTS engine '{engine}'. Use 'es-MX' (Google), 'espeak:la' or 'macos:Alice'.")
+                raise AnkiError(f"Unknown TTS engine '{engine}'. Use 'es-MX' (Google), 'espeak:la', 'macos:Alice' or 'piper:<voice>'.")
         except subprocess.CalledProcessError as e:
             raise AnkiError(f"{engine} TTS failed for {text!r}: {e.stderr.decode(errors='replace').strip() or e}") from e
         span.set_attribute("tts.audio_bytes", len(data))
@@ -115,6 +121,25 @@ def _check_macos_voice(voice: str) -> None:
     if voice not in names:
         near = sorted(n for n in names if voice.lower() in n.lower())[:5]
         raise AnkiError(f"macOS voice '{voice}' not found. Similar: {near or 'none'}. Italian voices include 'Alice'.")
+
+
+def _piper_model(voice: str) -> Path:
+    _require("piper", "Install it with `uv tool install piper-tts`.")
+    model = PIPER_VOICES / f"{voice}.onnx"
+    # piper needs the .onnx.json next to the model (phoneme map, espeak voice); without it, it can't speak.
+    if not (model.is_file() and model.with_suffix(".onnx.json").is_file()):
+        have = sorted(p.stem for p in PIPER_VOICES.glob("*.onnx"))
+        raise AnkiError(f"Piper voice '{voice}' not found: put {voice}.onnx and {voice}.onnx.json in {PIPER_VOICES}. "
+                        f"Installed: {have or 'none'}.")
+    return model
+
+
+def _piper_wav(text: str, voice: str) -> bytes:
+    model = _piper_model(voice)
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "out.wav"
+        subprocess.run(["piper", "-m", str(model), "-f", str(out)], input=text.encode(), capture_output=True, check=True)
+        return out.read_bytes()
 
 
 def _to_m4a(audio: bytes, suffix: str) -> bytes:

@@ -403,7 +403,8 @@ class AudioSpec(BaseModel):
     field: str = Field(description="Field that receives the [sound:...] tag, e.g. 'Audio' (Spanish) or 'Sound' (French).")
     voice: str = Field(
         description="Google voice as language[-REGION] ('es-MX', 'fr', 'de', 'pt-BR', 'no'), "
-        "or an offline engine: 'espeak:<lang>' (e.g. 'espeak:la' for Latin) or 'macos:<Voice>' (e.g. 'macos:Alice')."
+        "or an offline engine: 'espeak:<lang>' (e.g. 'espeak:la' for Latin), 'macos:<Voice>' (e.g. 'macos:Alice') "
+        "or 'piper:<voice>' (a local neural voice, e.g. 'piper:la_LA-vox-medium'). Use the deck profile's voice."
     )
     text: str | None = Field(default=None, description="Text to speak. Default: the note type's first field (plain text).")
 
@@ -544,7 +545,8 @@ def add_audio(
         str,
         Field(
             description="Latin: 'espeak:la' (Google's 'la' is NOT Latin and is rejected). Spanish: 'es-MX'. French: 'fr'. "
-            "Other: Google 'de', 'pt-BR', …, or offline 'espeak:<lang>' / 'macos:<Voice>'."
+            "Other: Google 'de', 'pt-BR', …, or offline 'espeak:<lang>' / 'macos:<Voice>' / 'piper:<voice>'. "
+            "Prefer the deck profile's voice."
         ),
     ],
     limit: Annotated[int, Field(ge=1, le=50, description="Max notes to voice in this call; call again for the rest.")] = 20,

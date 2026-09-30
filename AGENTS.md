@@ -26,7 +26,7 @@ extend `tests/conftest.py`'s `FakeAnki` when the server starts using a new AnkiC
 - `src/anki_mcp/profiles.py`: deck profiles, a JSON file at `~/.config/anki-mcp/profiles.json` (`ANKI_MCP_PROFILES` overrides it; tests point it at a tmp dir)
 - `examples/profiles.json`: a sample of the maintainer's real profiles (not kept in sync)
 - `src/anki_mcp/telemetry.py`: OpenTelemetry spans, metrics and logs (API-only, no-op until `setup()` finds an OTLP endpoint; SDK/exporter in the `otel` extra)
-- `src/anki_mcp/tts.py`: free TTS engines selected by voice string: `es-MX` (Google/gTTS), `espeak:la`, `macos:Alice`
+- `src/anki_mcp/tts.py`: free TTS engines selected by voice string: `es-MX` (Google/gTTS), `espeak:la`, `macos:Alice`, `piper:<voice>` (local Piper `.onnx` voices)
 - `tests/`: unit tests; `conftest.py` has `FakeAnki`, an in-memory AnkiConnect
 - `scripts/smoke.py`: stdio client that asserts on real tool results against the real collection
 - `scripts/otel_traffic.py`: random read-only/dry-run tool traffic with OTLP export on, to fill Grafana (see docs/observability.md)

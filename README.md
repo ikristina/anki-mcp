@@ -194,6 +194,7 @@ Save them once as a deck profile, and every session and agent follows them:
 | `es-MX`, `fr`, `de`, `pt-BR`, … | Google Translate (gTTS) | internet | Spanish, French (the same voices HyperTTS's GoogleTranslate service uses) |
 | `espeak:la` | eSpeak NG | `brew install espeak-ng` | Latin |
 | `macos:Alice` (any `say -v '?'` voice) | macOS `say` | macOS | natural offline voices |
+| `piper:la_LA-vox-medium` (any `<name>.onnx` + `.onnx.json` in `~/.local/share/piper-voices/`) | Piper (neural) | `uv tool install piper-tts` + the voice files | natural offline voices, incl. a self-trained Latin one ([latin-tts](../latin-tts)) |
 
 Google files are MP3; the offline engines produce M4A (AAC). Anki plays both.
 

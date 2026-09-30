@@ -51,3 +51,28 @@ def test_error_is_a_tool_error():
     # Only ToolError messages reach the model in MCP SDK 2.x; anything else becomes "Error executing tool".
     from mcp.server.mcpserver.exceptions import ToolError
     assert issubclass(AnkiError, ToolError)
+
+
+def test_missing_piper_voice_says_where_to_put_it(monkeypatch, tmp_path):
+    monkeypatch.setattr(tts.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(tts, "PIPER_VOICES", tmp_path)
+    (tmp_path / "other.onnx").write_bytes(b"")
+    with pytest.raises(AnkiError, match=r"la_LA-vox-medium\.onnx\.json in .*Installed: \['other'\]"):
+        tts.validate_voice("piper:la_LA-vox-medium")
+
+
+def test_piper_voice_needs_its_json(monkeypatch, tmp_path):
+    monkeypatch.setattr(tts.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(tts, "PIPER_VOICES", tmp_path)
+    (tmp_path / "v.onnx").write_bytes(b"")
+    with pytest.raises(AnkiError, match="not found"):
+        tts.validate_voice("piper:v")
+    (tmp_path / "v.onnx.json").write_text("{}")
+    tts.validate_voice("piper:v")
+
+
+def test_piper_audio_is_m4a(monkeypatch):
+    monkeypatch.setattr(tts, "_piper_wav", lambda text, voice: b"wav")
+    monkeypatch.setattr(tts, "_to_m4a", lambda audio, suffix: b"m4a:" + audio)
+    name, data = tts.synthesize("amīcus", "piper:v")
+    assert name.endswith(".m4a") and data == b"m4a:wav"

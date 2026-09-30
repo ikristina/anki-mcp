@@ -157,6 +157,15 @@ Your "user" is a model that only sees the tool **name, description, and input sc
   quietly erase `<b>`, alt spans and `[sound:]` tags. `update_notes` therefore comes with `get_notes(raw=True)`, only
   changes the fields it is given, and refuses any edit that drops a `[sound:]` tag. It is a dry run by default, like `add_audio`.
   TTS text also skips `<span class="alt">`, so a note with alternatives is voiced with only its main answer.
+- **Training a Latin voice (sibling project `latin-tts`).** Fine-tuned Piper from `en_US-lessac-medium` on one reader
+  (~5.4 h) of Vox Classica, a CC-BY sentence-aligned Classical Latin corpus. Piper phonemizes with eSpeak, so Latin
+  *rules* come from `espeak:la` and only the sound gets neural. Gotchas: the old checkpoint needs `--model.warmstart_ckpt`
+  (not `--ckpt_path`, which hits torch's `weights_only` load), and Piper saves `warmstart_ckpt` in the hparams, so every
+  *resume* silently re-copied the base weights over the trained ones until `train.py` skipped it. Found only by diffing a
+  weight tensor across a resume; the logs said "Restored all states".
+- **Macrons decide Latin stress in eSpeak.** `cīvitātēs` → `kiːwɪtˈaːteːs`, `civitates` → `kɪwˈɪtatɛs` (wrong stress).
+  The training text is macronized; the 232 Latin cards have none. So for the Piper voice, `audio.text` should be the
+  macronized Latin while Front stays as typed: a deck-profile convention, not code.
 
 ## 4. Workflow that works
 
