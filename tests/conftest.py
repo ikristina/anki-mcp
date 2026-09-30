@@ -76,6 +76,11 @@ class FakeAnki:
         elif term.startswith("note:"):
             raw = term[5:]  # escaped names match exactly; unescaped '*' is a wildcard
             ok = n["model"] == re.sub(r"\\(.)", r"\1", raw) if "\\" in raw else fnmatch.fnmatchcase(n["model"], raw)
+        elif term.startswith("tag:"):
+            pat = term[4:].lower()
+            ok = any(fnmatch.fnmatchcase(t.lower(), pat) or t.lower().startswith(pat + "::") for t in n["tags"])
+        elif ":" not in term:  # plain text: case-insensitive substring of any field, '*' as wildcard
+            ok = any(fnmatch.fnmatchcase(v.lower(), f"*{term.lower()}*") for v in n["fields"].values())
         elif term == "prop:lapses>0":
             ok = n["lapses"] > 0
         elif term == "is:suspended":

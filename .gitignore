@@ -32,3 +32,4 @@ htmlcov/
 .LSOverride
 Thumbs.db
 .DS_Store
+evals/results/

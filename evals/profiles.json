@@ -1,0 +1,25 @@
+{
+  "Languages::Spanish": {
+    "note_type": "Spanish",
+    "audio": {"field": "Audio", "voice": "es-MX", "text_field": "Word"},
+    "fields": {
+      "Word": "Spanish word, nouns with article (la cumbre); expressions as-is",
+      "Meaning": "short English meaning",
+      "WordType": "one of N, V, Adj, Adv, Expr, Prep, Pron, Conj, Num",
+      "Gender": "m, f or m/f for nouns; empty otherwise"
+    },
+    "tags": ["Spanish::Added"],
+    "conventions": ["Tag Spanish::Duolingo::<nn>_<Topic> instead if the user names a matching topic."]
+  },
+  "Languages::Latin": {
+    "note_type": "Basic (and reversed card)",
+    "audio": {"field": "Audio", "voice": "espeak:la", "text_field": "Front"},
+    "fields": {"Front": "Latin word or sentence", "Back": "English translation"},
+    "tags": ["latin"],
+    "conventions": [
+      "Never put the sound tag in Front too: the templates already play Audio with the Latin side.",
+      "Set audio.text to the plain Latin text so speech is never generated from HTML.",
+      "Voice is eSpeak on purpose: Google's 'la' is not Latin."
+    ]
+  }
+}

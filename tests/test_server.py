@@ -56,6 +56,14 @@ def test_search_notes_paginates_and_escapes(anki):
     assert page["notes"][0]["deck"] == "Languages::Spanish"
 
 
+def test_search_notes_tag_and_text_terms(anki):
+    # Models write these in search_notes (duplicate checks, "cards I tagged latin").
+    assert search_notes("tag:latin")["total"] == 3
+    assert search_notes("tag:Spanish::Duolingo")["total"] == 6  # parent tag matches children
+    assert search_notes('"deck:Languages::Spanish" cumbre')["total"] == 1
+    assert search_notes("-tag:latin CUMBRE")["total"] == 1
+
+
 def test_get_weak_cards_sorted_by_lapses(anki):
     cards = get_weak_cards(limit=5)
     assert [c["lapses"] for c in cards] == [5, 2]
