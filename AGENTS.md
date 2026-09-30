@@ -37,6 +37,7 @@ extend `tests/conftest.py`'s `FakeAnki` when the server starts using a new AnkiC
 - `.claude/skills/`: `flashcards` (routes technical cards to Obsidian/Yanki) and `language-cards` (vocab + audio)
 - `LEARNINGS.md`: design notes and gotchas. **Append to it** whenever you learn something non-obvious.
 - `docs/remote-from-phone.md`: using the server from a phone via Claude Code Remote Control (Mac setup + daily flow)
+- `docs/building-a-tts-voice.md`: making a TTS voice for a language with no good free one (the Latin Piper voice + a general recipe)
 - `docs/observability.md`: OpenTelemetry how-to (viewing anki-mcp's telemetry; adding OTel to any MCP server)
 - `ROADMAP.md`: planned headless / AnkiWeb-sync work
 
