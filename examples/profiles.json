@@ -18,6 +18,32 @@
       "Voice is eSpeak on purpose: Google's 'la' is not Latin."
     ]
   },
+  "Languages::SpanishRandom": {
+    "note_type": "Spanish MC + Typing",
+    "audio": {
+      "field": "Audio",
+      "voice": "es-MX",
+      "text_field": "Learnable"
+    },
+    "fields": {
+      "Learnable": "Spanish word or sentence as the user encountered it, with correct spelling, accents and punctuation; nouns with article. Alternative accepted answers go AFTER the main one inside <span class=\"alt\">alt 1|alt 2</span>, never with ';'. The multiple-choice cards show only the main answer. Only near-identical variants are alts (see conventions); anything with a different word or pronunciation gets its own note.",
+      "Definition": "natural English translation; if several are natural, list them separated by ' / '",
+      "Choices": "REQUIRED (the multiple-choice cards are blank without it): exactly 5 wrong Spanish options separated by ' | ', each shaped like the answer (same length and structure). Words: look-alikes or sound-alikes and related-but-different words (atardecer -> el amanecer | la madrugada | el mediodía). Sentences: near-misses that change one thing: wrong conjugation or person, ser/estar, wrong preposition or article gender, a swapped content word (season, time of day, activity). NEVER a decoy that is also a correct answer for the English prompt: no tú/usted/ustedes swaps when the English 'you' is ambiguous, no valid synonyms, no regional variants, nothing listed in the alt span. No '|' inside an option.",
+      "Extra": "short context shown on the front. Required when the English prompt has several distinct Spanish answers split into separate notes, so the prompt says which one is wanted: 'informal' / 'formal' / 'Mexico' (e.g. tu piscina = informal, su piscina = formal, tu alberca = Mexico, informal). Otherwise empty.",
+      "Extra 2": "optional note shown on the back: register notes, literal meaning, all accepted variants spelled out (standard vs informal), sibling notes ('Formal: su piscina (own card)'), where it was heard; e.g. 'From Duolingo'"
+    },
+    "tags": ["Spanish::Random"],
+    "conventions": [
+      "Words and sentences both use this note type. Each note makes 4 cards: translation and listening, each as multiple choice and as type-in. The user dropped tapping cards on 2026-09-29 (little value, trivial for one-word items).",
+      "Always fill Choices, also when tidying phone-added notes (they arrive with Choices empty), and include the decoys in the dry run so the user can review them.",
+      "Leave Mems empty. Attributes is optional: 'noun' / 'verb' to tell apart pairs like el atardecer / atardecer.",
+      "If the user says where the word or sentence came from, put it in Extra 2.",
+      "With alternatives, the main (non-alt) answer is the most standard one, and audio.text is that main answer only.",
+      "When the user's phrasing is informal or nonstandard, keep it as an alt and mark it in Extra 2 rather than dropping it.",
+      "Notes typed on the phone have only the main answer in Learnable and no audio. Alternatives may be written as plain text in Extra 2 (e.g. 'also: X | informal: Y') or, by mistake, in Choices (e.g. 'X; Y'). When tidying, move them into <span class=\"alt\">X|Y</span> after the main answer (or into separate notes, per the split rule), rewrite Extra 2 as a labelled note (Standard: ... / Very informal: ...), and replace Choices with real decoys.",
+      "Split rule (user, 2026-09-30): an alternative that uses a different word or sounds clearly different (tú vs usted conjugation, su vs tu, piscina vs alberca) is NOT an alt: it becomes its own note with its own audio, and each sibling gets a front Extra hint (informal / formal / Mexico) so the English prompt is unambiguous. Only near-identical variants stay as alts: dropped subject pronoun (yo/él/ellos), ellos/ellas, gender endings (amigo/amiga, perezoso/perezosa), punctuation."
+    ]
+  },
   "Languages::🇪🇸 Spanish": {
     "note_type": "Spanish",
     "audio": {
