@@ -26,6 +26,14 @@ No suitable deck yet?
 
 ## 2. Obsidian (Yanki) cards
 
+Write through the `obsidian` MCP server, vault id `personal` (`mcp__obsidian__obsidian_list_vaults` lists them). Never
+use Write/Edit for cards: the vault is not the working directory, so a file written there never reaches Yanki.
+
+1. `mcp__obsidian__obsidian_search_vault` (vault `personal`, `scope: "03 resources/Anki/<Deck>"`) to check that a card on the
+   same question doesn't already exist. If one does, show it and stop.
+2. `mcp__obsidian__obsidian_create_note` with `vault: "personal"`, `path: "03 resources/Anki/<Deck>/<file>.md"`
+   (vault-relative, forward slashes) and the card as `content`. It never overwrites an existing file.
+
 - Vault folder: `03 resources/Anki/<Deck>/` — the folder path under `03 resources/Anki/` becomes the deck name
   (`DDIA/04_Transactions` → `DDIA::04_Transactions`). Synced folders live in `.obsidian/plugins/yanki/data.json`.
 - **One card per file.** Filename: kebab-case summary of the question, ≤ 60 chars, `.md`.
@@ -40,7 +48,6 @@ No suitable deck yet?
 
   Tags: go/concurrency/patterns
   ```
-- Check first that a card on the same question doesn't already exist (`obsidian_search_vault`).
 - Don't edit the folder note (`<Deck>.md`); its Waypoint block is auto-generated.
 - Auto-sync is off: finish by telling the user to run **Yanki: Sync** in Obsidian.
 
