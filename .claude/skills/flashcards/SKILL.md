@@ -40,7 +40,7 @@ No suitable deck yet?
 
   Tags: go/concurrency/patterns
   ```
-- Check first that a card on the same question doesn't already exist (`obsidian_simple_search`).
+- Check first that a card on the same question doesn't already exist (`obsidian_search_vault`).
 - Don't edit the folder note (`<Deck>.md`); its Waypoint block is auto-generated.
 - Auto-sync is off: finish by telling the user to run **Yanki: Sync** in Obsidian.
 
