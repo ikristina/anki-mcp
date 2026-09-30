@@ -436,7 +436,8 @@ class NoteInput(_AgentInput):
         description="Anki note type (model) name. Omit it to use the deck profile's note_type (else 'Basic'). A value "
         "that differs from the deck profile's is still used, and the result carries a warning.",
     )
-    tags: list[str] = Field(default_factory=list, description="Tags without spaces, e.g. ['leetcode', 'heap'].")
+    tags: list[str] = Field(default_factory=list, description="Tags without spaces, e.g. ['leetcode', 'heap']. Omit them "
+                            "to use the deck profile's tags; given tags replace the profile's.")
     audio: "AudioSpec | None" = Field(default=None, description="Generate pronunciation audio (free Google Translate voice).")
 
 
@@ -484,7 +485,7 @@ def _attach_audio(addable, notes, field_cache, results):
 
 
 def _resolve_note_types(notes: list[NoteInput]) -> dict[int, dict]:
-    """Fill omitted note types from the deck profile (else Basic); flag explicit ones that differ from it.
+    """Fill omitted note types and tags from the deck profile (else Basic); flag note types that differ from it.
 
     An eval run left note_type out for the Spanish deck, validated against Basic, and needed two extra calls to recover.
     """
@@ -499,6 +500,9 @@ def _resolve_note_types(notes: list[NoteInput]) -> dict[int, dict]:
         elif want and note.note_type != want:
             notices[i] = {"warning": f"The deck profile for '{note.deck}' uses note type '{want}', not "
                                      f"'{note.note_type}'. Check that this is intended."}
+        if not note.tags and note.deck in saved and saved[note.deck].tags:
+            note.tags = list(saved[note.deck].tags)
+            notices.setdefault(i, {})["tags"] = f"{note.tags} (from deck profile)"
     return notices
 
 
@@ -517,6 +521,7 @@ def add_notes(
     Set `audio` on a note to generate pronunciation (needs internet; skipped in dry_run).
     Unknown keys in a note or its audio (e.g. 'text_field', 'notetype') are rejected, not ignored.
     An omitted note_type comes from the deck profile (else 'Basic'); one that differs from the profile's gets a warning.
+    Omitted tags come from the deck profile too.
     """
     decks = set(invoke("deckNames"))
     yanki = _yanki_counts()

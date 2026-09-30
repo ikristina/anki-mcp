@@ -349,6 +349,18 @@ def test_no_profile_means_basic_and_no_notice(anki):
     assert out["results"][0] == {"index": 0, "status": "valid"}
 
 
+def test_omitted_tags_come_from_the_deck_profile(anki):
+    from anki_mcp import profiles
+    profiles.save({"Languages::Spanish": profiles.DeckProfile(note_type="Spanish", tags=["Spanish::Added"])})
+    out = add_notes([NoteInput(deck="Languages::Spanish", fields={"Word": "la ventana", "Meaning": "window"}),
+                     NoteInput(deck="Languages::Spanish", fields={"Word": "el mapa", "Meaning": "map"},
+                               tags=["Spanish::Duolingo::26_Places"])])
+    assert out["results"][0]["tags"] == "['Spanish::Added'] (from deck profile)" and "tags" not in out["results"][1]
+    tags = {n["fields"].get("Word"): n["tags"] for n in anki.notes.values()}
+    assert tags["la ventana"] == ["Spanish::Added", "mcp-added"]
+    assert tags["el mapa"] == ["Spanish::Duolingo::26_Places", "mcp-added"]
+
+
 def test_add_notes_refuses_a_parent_made_only_of_yanki_subdecks(anki):
     # An eval run put a Kafka card in DDIA this way: outside every chapter subdeck and outside the vault.
     out = add_notes([NoteInput(deck="DDIA", fields={"Front": "Kafka consumer groups?", "Back": "One consumer per partition."})])
