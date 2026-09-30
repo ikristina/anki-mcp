@@ -207,9 +207,10 @@ Listen before trusting a voice. Even a good one mispronounces rare words: Google
 ```bash
 uv run pytest -q                # unit tests: fake in-memory AnkiConnect, no Anki/network needed (runs in CI)
 uv run python scripts/smoke.py  # end-to-end over stdio against your real collection (read-only; Anki must be running)
+uv run python evals/run.py --models haiku sonnet --repeats 5  # agent evals via `claude -p` against fakes (uses plan usage)
 ```
 
-See [LEARNINGS.md](LEARNINGS.md) for design notes.
+Eval results and method: [docs/evals.md](docs/evals.md). See [LEARNINGS.md](LEARNINGS.md) for design notes.
 
 
 ## Example use

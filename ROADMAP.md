@@ -107,6 +107,11 @@ with no transport or auth work. See [docs/remote-from-phone.md](docs/remote-from
 
 ## Phase 7: Evals and tests (continuous, start now)
 
+**Status: eval suite built (2026-09-30).** `evals/` holds 14 cases over `language-cards` and `flashcards`, run via `claude -p`
+against FakeAnki and an Obsidian stub, with Haiku/Sonnet/Opus results in [docs/evals.md](docs/evals.md). Fixes for its
+findings are in (`ef0be23`, `4b51524`, `37b82c0`, `7ee8c05`, `dbb29e2`) with re-run columns there. Next: a case for
+every new workflow; Haiku's open misses (preview without a dry run, routing a new topic into an existing deck).
+
 - Unit tests with a fake AnkiConnect, so CI runs without Anki.
 - Eval suite: prompts → expected tool calls/arguments via `claude -p --output-format stream-json`. For example, "add these 5
   Spanish words" should produce one `add_notes` call with the right fields and gender codes, and a Yanki deck should be routed to Obsidian.

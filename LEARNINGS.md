@@ -206,6 +206,38 @@ Your "user" is a model that only sees the tool **name, description, and input sc
   should call `add_notes` with deck=`Go`, and should not call `add_notes` 3 times with 1 note each.
 - Change one description and re-run. If the score moves, you are doing tool design with evidence rather than guessing.
 
+What building the suite taught (details and numbers in `docs/evals.md`):
+- **Isolate the eval session like a test, and assert the isolation.** `--strict-mcp-config` plus `--setting-sources project`
+  keeps the real `anki` server, user plugins and `~/.claude/CLAUDE.md` out. Each run's `system/init` event is checked for
+  exactly the expected servers, plugins and skills. That check failed every run the first time, because Claude Code had
+  auto-updated two minutes earlier and added a bundled skill. Without the check, a changed environment would have looked like a model difference.
+  Record the Claude Code version in every result.
+- **Skill frontmatter overrides `--model`.** `model: haiku` in a skill switches the model back for the rest of the turn, so a
+  Sonnet run of that skill is really a Haiku run. The runner copies the skills into a temp dir and rewrites `model:`.
+  `effort: low` still applies, so the comparison is between models at low effort.
+- **Fakes make agent evals safe and cheap to trust.** The server runs unchanged with `invoke` patched to FakeAnki, and
+  `ANKI_CONNECT_URL` is set to a dead port first, so an unpatched path fails instead of reaching the real collection. For a
+  second server the skill uses (Obsidian), a record-only stub with the real tool names and schemas turns "did it route to
+  Obsidian?" into a checkable tool call, not a regex over the reply.
+- **Store the raw stream and make scoring re-runnable.** A check that crashed on a run with no create call was fixed and
+  re-applied to the stored streams with `--rescore`: no re-run, no extra usage.
+- **Evals find documentation gaps that unit tests can't.** The flashcards skill never named the Obsidian create tool, so Haiku
+  reached for `Write` with a path outside the vault. `mixed` decks accept `add_notes` by design, so when Haiku ignored the
+  skill's routing table it put a technical card in `DDIA`, a parent deck made up only of Yanki subdecks.
+- **Pydantic ignores unknown keys by default, and models make them up.** The model copied `text_field` from the deck profile into
+  `add_notes`' `audio`, which has no such field, and it was dropped silently. For agent-facing inputs, `extra="forbid"` with a
+  fix-it message is the safer default.
+- **Making one input optional changes what the model leaves out.** Once `note_type` could come from the deck profile,
+  Haiku treated the whole profile as automatic and dropped `tags` too (7/120 runs). Filling tags from the profile as
+  well fixed it. Default the whole profile, or none of it.
+- **Score what the server did, not only what the model sent.** After those defaults, the checks read the
+  "(from deck profile)" notices in the result. Reading only the call arguments scored 0/30 on runs that were correct.
+- **Haiku vs Sonnet (5 runs each):**
+  - Mechanical cases: equal.
+  - Haiku lost on judgment: an ambiguous gender, and "preview" not treated as a dry run.
+  - Haiku saved less than its price suggests: 0.68× Sonnet's cost and 1.6× the time, because it took more turns, mostly loading
+    deferred MCP tools one at a time.
+
 ## 6b. Distribution: making it work for any agent
 
 - **The server is already portable.** MCP is a standard, so Claude Desktop, Cursor, VS Code/Copilot, Codex and Gemini CLI can all run

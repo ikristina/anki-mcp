@@ -14,6 +14,7 @@ uv sync                               # install deps
 uv run pytest -q                      # unit tests with a fake AnkiConnect; no Anki or network needed (CI runs these)
 uv run python scripts/smoke.py        # end-to-end check over stdio; exits non-zero on failure. Needs Anki running
 uv run anki-mcp                       # run the server (stdio); normally launched by the agent host, not by hand
+uv run python evals/run.py --case es-batch --models haiku   # agent evals via `claude -p` against FakeAnki + an Obsidian stub
 ```
 
 Run `pytest` after every change to `src/`, and the smoke test too when Anki is available. New tools need unit tests;
@@ -30,6 +31,9 @@ extend `tests/conftest.py`'s `FakeAnki` when the server starts using a new AnkiC
 - `tests/`: unit tests; `conftest.py` has `FakeAnki`, an in-memory AnkiConnect
 - `scripts/smoke.py`: stdio client that asserts on real tool results against the real collection
 - `scripts/otel_traffic.py`: random read-only/dry-run tool traffic with OTLP export on, to fill Grafana (see docs/observability.md)
+- `evals/`: agent evals. `run.py` runs `claude -p` per case in an isolated temp dir and scores the tool calls
+  (`cases.py`); `fake_server.py` (the server on `FakeAnki`) and `fake_obsidian.py` (record-only Obsidian stub) are
+  the only MCP servers it loads. `--rescore` re-applies changed checks to stored runs. Results: `docs/evals.md`
 - `.claude/skills/`: `flashcards` (routes technical cards to Obsidian/Yanki) and `language-cards` (vocab + audio)
 - `LEARNINGS.md`: design notes and gotchas. **Append to it** whenever you learn something non-obvious.
 - `docs/remote-from-phone.md`: using the server from a phone via Claude Code Remote Control (Mac setup + daily flow)
