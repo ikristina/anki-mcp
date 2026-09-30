@@ -147,6 +147,12 @@ Your "user" is a model that only sees the tool **name, description, and input sc
   ser/estar, a swapped season). It's broken when a decoy is also correct: "you" in the English makes
   `tú`/`ustedes`/`usted` all valid, so those swaps are banned in the deck profile. Changing the note type is a schema
   change and forces a full sync, so the Choices were filled on the old note type first (the field carries over).
+- **Template fixes live on the note type, so switching note types silently drops them.** After the move to the
+  MultipleChoice preset, sentence audio was cut off again: `window.alwaysShowInfo = true` had only ever been added to the
+  old Tapping preset's backs. The new preset's type-in fronts also shipped the demo on-screen keyboard
+  (`<setting id="static_keys">this layout is customizable</setting>`), shown on phones as letter tiles spelling that
+  sentence. Emptying `static_keys` (and `random_keys`) leaves plain typing. Editing template text via
+  `updateModelTemplates` is not a schema change, so it syncs normally. Diff the old and new templates before moving notes.
 - **An edit tool needs a raw read path.** `get_notes` strips HTML to keep results small, so a model editing from it would
   quietly erase `<b>`, alt spans and `[sound:]` tags. `update_notes` therefore comes with `get_notes(raw=True)`, only
   changes the fields it is given, and refuses any edit that drops a `[sound:]` tag. It is a dry run by default, like `add_audio`.
