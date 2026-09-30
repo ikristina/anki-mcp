@@ -98,7 +98,8 @@ class FakeAnki:
         if note["deckName"] not in self.decks:
             return "deck was not found"
         first = MODELS[note["modelName"]][0]
-        dup = any(n["deck"] == note["deckName"] and n["fields"][first] == note["fields"].get(first) for n in self.notes.values())
+        dup = any(n["deck"] == note["deckName"] and n["model"] == note["modelName"]  # Anki: same deck and note type
+                  and n["fields"][first] == note["fields"].get(first) for n in self.notes.values())
         if dup and not note.get("options", {}).get("allowDuplicate"):
             return "cannot create note because it is a duplicate"
         return None

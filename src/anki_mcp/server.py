@@ -418,7 +418,11 @@ class NoteInput(_AgentInput):
         "for 'Cloze' use {'Text': 'The {{c1::answer}} ...', 'Back Extra': ...}. "
         "Plain text newlines become line breaks; HTML is allowed."
     )
-    note_type: str = Field(default="Basic", description="Anki note type (model) name.")
+    note_type: str | None = Field(
+        default=None,
+        description="Anki note type (model) name. Omit it to use the deck profile's note_type (else 'Basic'). A value "
+        "that differs from the deck profile's is still used, and the result carries a warning.",
+    )
     tags: list[str] = Field(default_factory=list, description="Tags without spaces, e.g. ['leetcode', 'heap'].")
     audio: "AudioSpec | None" = Field(default=None, description="Generate pronunciation audio (free Google Translate voice).")
 
@@ -466,6 +470,25 @@ def _attach_audio(addable, notes, field_cache, results):
     return kept
 
 
+def _resolve_note_types(notes: list[NoteInput]) -> dict[int, dict]:
+    """Fill omitted note types from the deck profile (else Basic); flag explicit ones that differ from it.
+
+    An eval run left note_type out for the Spanish deck, validated against Basic, and needed two extra calls to recover.
+    """
+    saved = profiles.load()
+    notices: dict[int, dict] = {}
+    for i, note in enumerate(notes):
+        want = saved[note.deck].note_type if note.deck in saved else None
+        if note.note_type is None:
+            note.note_type = want or "Basic"
+            if want:
+                notices[i] = {"note_type": f"{want} (from deck profile)"}
+        elif want and note.note_type != want:
+            notices[i] = {"warning": f"The deck profile for '{note.deck}' uses note type '{want}', not "
+                                     f"'{note.note_type}'. Check that this is intended."}
+    return notices
+
+
 @mcp.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=False, open_world_hint=True))
 def add_notes(
     notes: Annotated[list[NoteInput], Field(min_length=1, max_length=50)],
@@ -480,6 +503,7 @@ def add_notes(
     valid ones are still added. Prefer one batched call over many single-note calls.
     Set `audio` on a note to generate pronunciation (needs internet; skipped in dry_run).
     Unknown keys in a note or its audio (e.g. 'text_field', 'notetype') are rejected, not ignored.
+    An omitted note_type comes from the deck profile (else 'Basic'); one that differs from the profile's gets a warning.
     """
     decks = set(invoke("deckNames"))
     yanki = _yanki_counts()
@@ -487,6 +511,7 @@ def add_notes(
     field_cache: dict[str, list[str]] = {}
     results: list[dict] = [{} for _ in notes]
     candidates: list[tuple[int, dict]] = []
+    notices = _resolve_note_types(notes)
 
     for i, note in enumerate(notes):
         if note.deck not in decks:
@@ -557,6 +582,8 @@ def add_notes(
             for (i, _), nid in zip(addable, ids):
                 results[i] = {"index": i, "status": "added", "note_id": nid} if nid else {"index": i, "status": "error", "error": "Anki rejected the note."}
 
+    for i, extra in notices.items():
+        results[i].update(extra)
     summary = {s: sum(r["status"] == s for r in results) for s in ("added", "valid", "error")}
     if added := Counter(notes[i].deck for i, r in enumerate(results) if r["status"] == "added"):
         for deck, n in added.items():

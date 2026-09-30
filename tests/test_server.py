@@ -319,3 +319,26 @@ def test_unknown_key_error_reaches_the_model(anki):
     result = asyncio.run(run())
     assert result.is_error and "use 'tags' (a list)" in result.content[0].text
     assert anki.calls == []  # rejected before touching Anki
+
+
+def _spanish_profile():
+    from anki_mcp import profiles
+    profiles.save({"Languages::Spanish": profiles.DeckProfile(note_type="Spanish")})
+
+
+def test_omitted_note_type_comes_from_the_deck_profile(anki):
+    _spanish_profile()
+    out = add_notes([NoteInput(deck="Languages::Spanish", fields={"Word": "la ventana", "Meaning": "window"})], dry_run=True)
+    assert out["results"][0] == {"index": 0, "status": "valid", "note_type": "Spanish (from deck profile)"}
+
+
+def test_note_type_differing_from_profile_warns_but_is_used(anki):
+    _spanish_profile()
+    out = add_notes([NoteInput(deck="Languages::Spanish", note_type="Basic", fields={"Front": "q", "Back": "a"})], dry_run=True)
+    assert out["results"][0]["status"] == "valid"
+    assert "uses note type 'Spanish', not 'Basic'" in out["results"][0]["warning"]
+
+
+def test_no_profile_means_basic_and_no_notice(anki):
+    out = add_notes([NoteInput(deck="Default", fields={"Front": "q", "Back": "a"})], dry_run=True)
+    assert out["results"][0] == {"index": 0, "status": "valid"}
