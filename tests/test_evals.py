@@ -67,6 +67,16 @@ def test_checks_catch_split_adds_and_wrong_gender():
     assert result["dry run before real add"]
 
 
+def test_omitted_note_type_counts_as_the_profile_one():
+    notes = [{k: v for k, v in _note(w, g).items() if k != "note_type"} for w, g in
+             [("la ventana", "f"), ("la madrugada", "f"), ("el mapa", "m"), ("la luz", "f"), ("el sol", "m")]]
+    real = ("mcp__anki__add_notes", {"notes": notes},
+            {"results": [{"index": i, "status": "added", "note_type": "Spanish (from deck profile)"} for i in range(5)]})
+    run = runner.parse(_stream(_add(notes, True), real))
+    assert [n["note_type"] for n in cases.added(run)] == ["Spanish"] * 5
+    assert _checks("es-batch", run)["deck + note type"]
+
+
 def test_isolation_guard_flags_extra_servers():
     run = runner.parse(_stream(init_servers=("anki", "obsidian", "anki-real")))
     assert "MCP servers" in runner.isolation_problems(run)[0]

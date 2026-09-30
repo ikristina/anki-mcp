@@ -19,13 +19,17 @@ def adds(run, dry=None):
 
 
 def added(run):
-    """Notes that the server reports as actually added (status 'added'), across all real add_notes calls."""
+    """Notes that the server reports as actually added (status 'added'), across all real add_notes calls, with the
+    effective note_type filled in."""
     out = []
     for c in adds(run, dry=False):
         if c.is_error:
             continue
         results = json.loads(c.result)["results"]
-        out += [c.input["notes"][r["index"]] for r in results if r.get("status") == "added"]
+        for r in results:
+            if r.get("status") == "added":  # an omitted note_type is resolved by the server from the deck profile
+                n = c.input["notes"][r["index"]]
+                out.append({**n, "note_type": n.get("note_type") or r.get("note_type", "Basic").removesuffix(" (from deck profile)")})
     return out
 
 
