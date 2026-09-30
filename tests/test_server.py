@@ -294,3 +294,28 @@ def test_sync_without_ankiweb_login_says_what_to_do(anki):
     anki.sync_error = "sync: auth not configured"
     with pytest.raises(AnkiError, match="log in"):
         sync()
+
+
+@pytest.mark.parametrize("note, message", [
+    ({**SPANISH, "fields": {"Word": "la ventana"}, "audio": {"field": "Audio", "voice": "es-MX", "text_field": "Word"}},
+     r"Unknown key\(s\) \['text_field'\] in AudioSpec.*put the text to speak in 'text'"),
+    ({"deck": "Default", "notetype": "Basic", "fields": {"Front": "q"}}, r"\['notetype'\] in NoteInput.*use 'note_type'"),
+])
+def test_add_notes_rejects_unknown_keys_with_a_fix(anki, note, message):
+    # Pydantic used to drop these silently: an eval run passed audio.text_field copied from the deck profile.
+    with pytest.raises(ValueError, match=message):
+        NoteInput.model_validate(note)
+
+
+def test_unknown_key_error_reaches_the_model(anki):
+    import asyncio
+
+    from mcp import Client
+
+    async def run():
+        async with Client(server.mcp) as c:
+            return await c.call_tool("add_notes", {"notes": [{"deck": "Default", "fields": {"Front": "q"}, "tag": ["x"]}]})
+
+    result = asyncio.run(run())
+    assert result.is_error and "use 'tags' (a list)" in result.content[0].text
+    assert anki.calls == []  # rejected before touching Anki

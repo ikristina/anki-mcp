@@ -15,7 +15,7 @@ from typing import Annotated
 
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from anki_mcp import profiles, telemetry
 from anki_mcp.client import AnkiError, invoke
@@ -387,7 +387,31 @@ def list_note_types(
     return result
 
 
-class NoteInput(BaseModel):
+# Keys models tend to invent, with what to use instead. Unknown keys used to be dropped silently (pydantic's default):
+# an eval run passed audio.text_field (copied from the deck profile), which does nothing here.
+_KEY_HINTS = {
+    "text_field": "put the text to speak in 'text' (the plain text of the profile's text_field)",
+    "notetype": "use 'note_type'", "model": "use 'note_type'", "modelName": "use 'note_type'",
+    "deckName": "use 'deck'", "tag": "use 'tags' (a list)",
+}
+
+
+class _AgentInput(BaseModel):
+    """Rejects unknown keys with a fix-it message instead of silently ignoring them."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _no_unknown_keys(cls, data):
+        if isinstance(data, dict) and (unknown := [k for k in data if k not in cls.model_fields]):
+            hints = "; ".join(f"'{k}': {_KEY_HINTS[k]}" for k in unknown if k in _KEY_HINTS)
+            raise ValueError(f"Unknown key(s) {unknown} in {cls.__name__}. Allowed: {list(cls.model_fields)}."
+                             + (f" {hints}." if hints else ""))
+        return data
+
+
+class NoteInput(_AgentInput):
     deck: str = Field(description="Exact existing deck name, e.g. 'Go' or 'DDIA::04_Transactions'.")
     fields: dict[str, str] = Field(
         description="Field name -> content. For note_type 'Basic' use {'Front': ..., 'Back': ...}; "
@@ -399,14 +423,18 @@ class NoteInput(BaseModel):
     audio: "AudioSpec | None" = Field(default=None, description="Generate pronunciation audio (free Google Translate voice).")
 
 
-class AudioSpec(BaseModel):
+class AudioSpec(_AgentInput):
     field: str = Field(description="Field that receives the [sound:...] tag, e.g. 'Audio' (Spanish) or 'Sound' (French).")
     voice: str = Field(
         description="Google voice as language[-REGION] ('es-MX', 'fr', 'de', 'pt-BR', 'no'), "
         "or an offline engine: 'espeak:<lang>' (e.g. 'espeak:la' for Latin), 'macos:<Voice>' (e.g. 'macos:Alice') "
         "or 'piper:<voice>' (a local neural voice, e.g. 'piper:la_LA-vox-medium'). Use the deck profile's voice."
     )
-    text: str | None = Field(default=None, description="Text to speak. Default: the note type's first field (plain text).")
+    text: str | None = Field(
+        default=None,
+        description="Plain text to speak. Default: the note type's first field. There is no 'text_field' key: when the "
+        "deck profile's audio.text_field isn't the first field, pass that field's plain text here.",
+    )
 
 
 NoteInput.model_rebuild()
@@ -451,6 +479,7 @@ def add_notes(
     of an existing first field in the same deck). Invalid notes are reported and skipped;
     valid ones are still added. Prefer one batched call over many single-note calls.
     Set `audio` on a note to generate pronunciation (needs internet; skipped in dry_run).
+    Unknown keys in a note or its audio (e.g. 'text_field', 'notetype') are rejected, not ignored.
     """
     decks = set(invoke("deckNames"))
     yanki = _yanki_counts()
