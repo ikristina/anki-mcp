@@ -16,7 +16,7 @@ Blog post about building it: [ikristina.github.io/blog/anki-mcp-server](https://
 | `get_notes` | Full content for specific note ids; `raw=True` returns stored HTML and `[sound:]` tags, for editing |
 | `get_weak_cards` | Most-forgotten cards (lapses, then ease), optionally per deck |
 | `get_deck_profile` / `set_deck_profile` | Your saved per-deck conventions (note type, audio field + voice, how to fill each field, tags, rules). Stored in a local JSON file, not in Anki |
-| `add_audio` | Adds pronunciation audio to *existing* notes that lack it; dry run by default, batches of ≤50, skips notes that already have audio |
+| `add_audio` | Adds pronunciation audio to *existing* notes that lack it; dry run by default, batches of ≤50, skips notes that already have audio. `replace=True` re-voices them (e.g. after switching voice), and `texts` sets the spoken text per note (e.g. with macrons) |
 | `update_notes` | Edits fields of existing notes and adds tags; dry run by default with an old → new diff, tags `mcp-edited`, refuses Yanki notes and edits that would drop audio |
 | `sync` | Syncs desktop Anki with AnkiWeb (normal syncs only; refuses a full sync and says why), so notes added on a phone can be tidied and voiced remotely. See [docs/remote-from-phone.md](docs/remote-from-phone.md) |
 | `add_notes` | Batch add with validation, `dry_run`, duplicate check, auto-tag `mcp-added`, optional free TTS audio; refuses Yanki-owned decks |
@@ -41,13 +41,19 @@ Skills in `.claude/skills/`:
 
 ### 2. eSpeak NG (for Latin audio)
 
-Google's voices have no real Latin, so Latin uses eSpeak NG's Latin voice. It's robotic, but the pronunciation is correct.
+Google's voices have no real Latin, so Latin uses eSpeak NG's Latin voice. ~~It's robotic, but the pronunciation is correct.~~
+It's robotic, and its pronunciation is often wrong.
 
 ```bash
 brew install espeak-ng
 ```
 
 Check it: `espeak-ng --voices=la` should list `Latin`.
+
+**Better:** I trained my own Classical Latin voice with Piper, and it sounds far more natural than eSpeak. It's not
+shared (the base model's license forbids redistribution), but you can build the same one:
+[docs/building-a-tts-voice.md](docs/building-a-tts-voice.md). Install it as `piper:la_LA-vox-medium` (see
+[Audio voices](#audio-voices)). eSpeak is still needed: Piper uses its Latin rules to turn text into phonemes.
 
 ### 3. The server
 
@@ -192,7 +198,7 @@ Save them once as a deck profile, and every session and agent follows them:
 | Voice string | Engine | Needs | Used for |
 |---|---|---|---|
 | `es-MX`, `fr`, `de`, `pt-BR`, … | Google Translate (gTTS) | internet | Spanish, French (the same voices HyperTTS's GoogleTranslate service uses) |
-| `espeak:la` | eSpeak NG | `brew install espeak-ng` | Latin |
+| `espeak:la` | eSpeak NG | `brew install espeak-ng` | ~~Latin~~ robotic fallback; prefer the Piper voice below |
 | `macos:Alice` (any `say -v '?'` voice) | macOS `say` | macOS | natural offline voices |
 | `piper:la_LA-vox-medium` (any `<name>.onnx` + `.onnx.json` in `~/.local/share/piper-voices/`) | Piper (neural) | `uv tool install piper-tts` + the voice files | natural offline voices, incl. a self-trained Latin one ([how](docs/building-a-tts-voice.md)) |
 
@@ -200,7 +206,7 @@ Google files are MP3; the offline engines produce M4A (AAC). Anki plays both.
 
 Listen before trusting a voice. Even a good one mispronounces rare words: Google `en-US` gets *chimerical* wrong where
 `en-GB` is right, and only `macos:Samantha` says *kvetch* correctly. To fix one card, clear its audio field in Anki
-(`add_audio` never overwrites) and run `add_audio` on just that note with a different voice.
+and run `add_audio` on just that note with a different voice (or use `replace=True`).
 
 ## Development
 

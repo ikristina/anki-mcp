@@ -21,7 +21,7 @@ from anki_mcp import profiles, telemetry
 from anki_mcp.client import AnkiError, invoke
 from anki_mcp.profiles import DeckProfile
 from anki_mcp.telemetry import log, notes_written
-from anki_mcp.tts import synthesize, validate_voice
+from anki_mcp.tts import audio_stem, synthesize, validate_voice
 
 mcp = MCPServer(
     "anki",
@@ -632,15 +632,32 @@ def add_audio(
             "IPA transcriptions ('/ˈvɪr.əl/', '(/skɔːrn/)'). Notes without a cloze are skipped. For Cloze decks."
         ),
     ] = False,
+    texts: Annotated[
+        dict[int, str] | None,
+        Field(
+            description="Note id -> exact text to speak instead of text_field, e.g. the macronized form "
+            "{1234: 'cīvitātēs'} when the deck profile asks for it. Notes not listed speak text_field."
+        ),
+    ] = None,
+    replace: Annotated[
+        bool,
+        Field(
+            description="Replace existing [sound:] tags in audio_field (e.g. re-voicing a deck with a better voice). "
+            "Notes already holding this exact voice + text are skipped, so re-running still converges. Only when the "
+            "user asked to re-voice."
+        ),
+    ] = False,
 ) -> dict:
     """Add pronunciation audio to EXISTING notes that don't have it yet (use add_notes' `audio` option for new notes).
 
     Skips notes whose audio_field already holds a [sound:...] tag, so it is safe to re-run until 'remaining' is 0.
+    replace=True re-voices them instead (old files stay in Anki's media folder until Tools → Check Media).
     Cloze notes: set cloze_only=True so only the hidden word is spoken (audio_field can be 'Back Extra').
     Only fills one field per note (no schema change, no full sync, review history untouched). Yanki notes are skipped.
     Workflow: dry run → voice ~5 notes and let the user listen in Anki → continue in batches.
     """
     validate_voice(voice)
+    texts = texts or {}
     ids = invoke("findNotes", query=query)
     notes = invoke("notesInfo", notes=ids) if ids else []
     counts = Counter()
@@ -653,10 +670,10 @@ def add_audio(
         elif text_field not in fields or audio_field not in fields:
             counts[f"skipped_missing_field ({n['modelName']})"] += 1
             missing_fields.setdefault(n["modelName"], list(fields))
-        elif _SOUND_RE.search(fields[audio_field]["value"]):
-            counts["already_has_audio"] += 1
-        elif not (text := _speech_text(fields[text_field]["value"], cloze_only)):
+        elif not (text := texts.get(n["noteId"], "").strip() or _speech_text(fields[text_field]["value"], cloze_only)):
             counts["skipped_no_cloze" if cloze_only else "skipped_empty_text"] += 1
+        elif _SOUND_RE.search(audio := fields[audio_field]["value"]) and (not replace or audio_stem(text, voice) in audio):
+            counts["already_has_audio"] += 1
         else:
             if _SOUND_RE.search(fields[text_field]["value"]):
                 counts["warning_text_field_also_has_sound"] += 1
@@ -670,7 +687,7 @@ def add_audio(
     if missing_fields:
         result["available_fields"] = missing_fields
     if dry_run:
-        result["would_voice"] = [{"note_id": n["noteId"], "text": t[:80]} for n, t in batch]
+        result["would_voice"] = [{"note_id": n["noteId"], "text": t[:80], "replaces": _SOUND_RE.findall(n["fields"][audio_field]["value"])} for n, t in batch]
         result["remaining_after"] = len(todo) - len(batch)
         return result
 
@@ -680,6 +697,7 @@ def add_audio(
             filename, data = synthesize(text, voice)
             invoke("storeMediaFile", filename=filename, data=base64.b64encode(data).decode())
             current = n["fields"][audio_field]["value"]
+            current = _SOUND_RE.sub("", current).strip() if replace else current
             invoke("updateNoteFields", note={"id": n["noteId"], "fields": {audio_field: f"{current}[sound:{filename}]"}})
             done.append({"note_id": n["noteId"], "text": text[:80]})
         except AnkiError as e:

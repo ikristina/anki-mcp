@@ -166,6 +166,10 @@ Your "user" is a model that only sees the tool **name, description, and input sc
 - **Macrons decide Latin stress in eSpeak.** `cīvitātēs` → `kiːwɪtˈaːteːs`, `civitates` → `kɪwˈɪtatɛs` (wrong stress).
   The training text is macronized; the 232 Latin cards have none. So for the Piper voice, `audio.text` should be the
   macronized Latin while Front stays as typed: a deck-profile convention, not code.
+- **Re-voicing a deck needs an explicit overwrite.** `add_audio` skips notes with audio (that makes it re-runnable) and
+  `update_notes` refuses to drop `[sound:]`, so a new voice couldn't reach old cards. `replace=True` plus per-note `texts`
+  (for the macrons) fixes that. It still converges because media names are `sha224(voice|text)`: a note already holding
+  the file for this exact voice + text is skipped as done.
 
 ## 4. Workflow that works
 

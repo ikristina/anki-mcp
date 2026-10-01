@@ -190,6 +190,20 @@ def test_add_audio_writes_batch_and_is_rerunnable(anki, monkeypatch):
     assert len(anki.media) == 2
 
 
+def test_add_audio_replace_revoices_with_given_text_and_converges(anki, monkeypatch):
+    monkeypatch.setattr(server, "validate_voice", lambda v: None)
+    add_audio(LATIN_Q, "Front", "Audio", "espeak:la", dry_run=False)
+    nid = _note_id(anki, "Languages::Latin", "Socius")
+    plan = add_audio(LATIN_Q, "Front", "Audio", "piper:la", texts={nid: "Socius"}, replace=True, limit=1)
+    assert plan["eligible"] == 3 and plan["would_voice"][0]["replaces"]
+    r = add_audio(LATIN_Q, "Front", "Audio", "piper:la", texts={nid: "Sŏcius"}, replace=True, dry_run=False)
+    assert (len(r["voiced"]), r["remaining"]) == (3, 0)
+    audio = anki.notes[nid]["fields"]["Audio"]
+    assert audio == f"[sound:{server.audio_stem('Sŏcius', 'piper:la')}.mp3]"  # old tag gone, override text spoken
+    again = add_audio(LATIN_Q, "Front", "Audio", "piper:la", texts={nid: "Sŏcius"}, replace=True)
+    assert again["eligible"] == 0 and again["already_has_audio"] == 3
+
+
 def test_add_audio_rejects_google_latin_and_explains_fields(anki):
     with pytest.raises(AnkiError, match="espeak:la"):
         add_audio(LATIN_Q, "Front", "Audio", "la")

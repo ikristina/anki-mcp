@@ -12,6 +12,7 @@ import pytest
 
 from anki_mcp import server
 from anki_mcp.client import AnkiError
+from anki_mcp.tts import audio_stem
 
 MODELS = {
     "Basic": ["Front", "Back"],
@@ -198,5 +199,5 @@ def anki(monkeypatch, tmp_path):
     monkeypatch.setenv("ANKI_MCP_PROFILES", str(tmp_path / "profiles.json"))
     monkeypatch.setattr(server, "invoke", fake)
     # Deterministic, offline audio: no gTTS network calls, no eSpeak/afconvert binaries needed.
-    monkeypatch.setattr(server, "synthesize", lambda text, voice: (f"anki-mcp-{abs(hash((text, voice)))}.mp3", b"ID3fake"))
+    monkeypatch.setattr(server, "synthesize", lambda text, voice: (f"{audio_stem(text, voice)}.mp3", b"ID3fake"))
     return fake

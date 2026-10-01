@@ -69,8 +69,12 @@ def synthesize(text: str, voice: str) -> tuple[str, bytes]:
         except subprocess.CalledProcessError as e:
             raise AnkiError(f"{engine} TTS failed for {text!r}: {e.stderr.decode(errors='replace').strip() or e}") from e
         span.set_attribute("tts.audio_bytes", len(data))
-    digest = hashlib.sha224(f"{voice}|{text}".encode()).hexdigest()
-    return f"anki-mcp-{digest}.{ext}", data
+    return f"{audio_stem(text, voice)}.{ext}", data
+
+
+def audio_stem(text: str, voice: str) -> str:
+    """Media filename (no extension) for text spoken by voice: the same text and voice always give the same file."""
+    return "anki-mcp-" + hashlib.sha224(f"{voice}|{text}".encode()).hexdigest()
 
 
 def _google(text: str, voice: str) -> bytes:
