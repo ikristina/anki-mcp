@@ -83,7 +83,7 @@ Your "user" is a model that only sees the tool **name, description, and input sc
 
 ## 3b. Server vs. skill: where each rule belongs
 
-"Tech/interview cards go to Obsidian, everything else goes to Anki" is split in two:
+"Tech cards go to Obsidian, everything else goes to Anki" is split in two:
 - **The MCP server enforces the invariant.** `add_notes` refuses Yanki-owned decks, and its error says where to go instead. This holds no matter which agent, prompt or model calls it.
 - **A skill carries the policy/workflow** (`.claude/skills/flashcards/SKILL.md`): how to route, the Yanki markdown format, and the reminder to sync. It composes two servers (`anki` + the existing `obsidian` one). There was no need to build an Obsidian writer, because a server already existed.
 - Expose facts, not only rules: `list_decks` returns `source: yanki|anki|mixed`, so the agent can decide *before* it hits an error.

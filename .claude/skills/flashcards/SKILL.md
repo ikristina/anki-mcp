@@ -1,6 +1,6 @@
 ---
 name: flashcards
-description: Create flashcards in the right place. Use whenever the user asks to make, add or save flashcards/Anki cards, or to turn notes, a solution, or a conversation into cards. Routes technical/interview-prep cards to the Obsidian vault (synced to Anki by Yanki) and everything else directly to Anki via the anki MCP server.
+description: Create flashcards in the right place. Use whenever the user asks to make, add or save flashcards/Anki cards, or to turn notes, a solution, or a conversation into cards. Routes technical cards to the Obsidian vault (synced to Anki by Yanki) and everything else directly to Anki via the anki MCP server.
 ---
 
 # Flashcards: pick the destination, then write
@@ -19,8 +19,8 @@ Call `mcp__anki__list_decks` and look at the target deck's `source`:
 | `mixed` | Technical topic → Obsidian. Anything else (language vocab etc.) → `add_notes` |
 
 No suitable deck yet?
-- Technical / interview prep (system design, distributed systems, Go, Python, k8s, LeetCode patterns,
-  company interview prep) → new folder in the vault (section 2) — and tell the user they must add that folder
+- Technical (system design, distributed systems, Go, Python, k8s, LeetCode patterns,
+  company-specific tech) → new folder in the vault (section 2) — and tell the user they must add that folder
   to Yanki's synced folders (Yanki settings), or it will never reach Anki.
 - Anything else → ask the user which existing deck, don't invent one.
 

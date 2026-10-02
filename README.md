@@ -22,7 +22,7 @@ Blog post about building it: [ikristina.github.io/blog/anki-mcp-server](https://
 | `add_notes` | Batch add with validation, `dry_run`, duplicate check, auto-tag `mcp-added`, optional free TTS audio; refuses Yanki-owned decks |
 
 Skills in `.claude/skills/`:
-- `flashcards` routes cards: technical/interview topics become markdown in the Obsidian vault (synced by Yanki), and everything else goes straight to Anki.
+- `flashcards` routes cards: technical topics become markdown in the Obsidian vault (synced by Yanki), and everything else goes straight to Anki.
 - `language-cards` (`/language-cards <words>`) adds vocabulary with pronunciation audio to any language deck, following that deck's profile. If a deck has no profile yet, it works one out with `describe_deck` and asks you to confirm it. It also tidies cards you typed on your phone: fixes the text, adds audio and formats alternative answers.
 
 ## Installation
