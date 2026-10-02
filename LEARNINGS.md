@@ -170,6 +170,10 @@ Your "user" is a model that only sees the tool **name, description, and input sc
   `update_notes` refuses to drop `[sound:]`, so a new voice couldn't reach old cards. `replace=True` plus per-note `texts`
   (for the macrons) fixes that. It still converges because media names are `sha224(voice|text)`: a note already holding
   the file for this exact voice + text is skipped as done.
+- **Audio that plays only on tap: `<audio controls src="file.mp3">`, not `[sound:]`.** Anki autoplays every `[sound:]` on a
+  side, and the only off switch (deck option "Don't play audio automatically") is all-or-nothing. A plain HTML `<audio>`
+  element in a field is left alone, so an example sentence can have its own player while the word still autoplays.
+  Tested 2026-10-02 on desktop and AnkiMobile (iPad). Not yet checked: whether Tools → Check Media counts the file as used.
 
 ## 4. Workflow that works
 
