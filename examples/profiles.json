@@ -79,6 +79,7 @@
     ],
     "conventions": [
       "Words and sentences both use this note type. Each note makes 4 cards: translation and listening, each as multiple choice and as type-in. The user dropped tapping cards on 2026-09-29 (little value, trivial for one-word items).",
+      "This deck is for everything the user adds by hand, unrelated to Pimsleur.",
       "Always fill Choices, also when tidying phone-added notes (they arrive with Choices empty), and include the decoys in the dry run so the user can review them.",
       "Leave Mems empty. Attributes is optional: 'noun' / 'verb' to tell apart pairs like el atardecer / atardecer.",
       "If the user says where the word or sentence came from, put it in Extra 2.",
@@ -86,7 +87,8 @@
       "The main (non-alt) answer is the form the user gave, normalized; audio.text is that main answer only. Alts are never spoken.",
       "Mark regional preference in Extra 2, e.g. 'Sabrosa is common in Mexico; rica in Spain'. Label tú/usted forms there ('Informal (tú): ... / Formal (usted): ...').",
       "Notes typed on the phone have only the main answer in Learnable and no audio. Alternatives may be written as plain text in Extra 2 (e.g. 'also: X | informal: Y') or, by mistake, in Choices (e.g. 'X; Y'). When tidying, move them into <span class=\"alt\">X|Y</span> after the main answer, rewrite Extra 2 as a labelled note (Standard: ... / Very informal: ...), and replace Choices with real decoys.",
-      "Example sentences only when the user asks for them: put them in Extra 2 (shown on the back only) as 'Example: <Spanish sentence> (<English translation>)', on a line before any other Extra 2 note. Never add examples unprompted, and never in Extra (it shows on the front)."
+      "Example sentences only when the user asks for them: put them in Extra 2 (shown on the back only) as 'Example: <Spanish sentence> (<English translation>)', on a line before any other Extra 2 note. Never add examples unprompted, and never in Extra (it shows on the front).",
+      "EVERY example sentence gets tap-to-play audio (user, 2026-10-02), always, without asking. After add_notes, run `uv run python scripts/example_audio.py <note_id>=\"<Spanish sentence only>\" ...` for each new note with an example. It appends `<br><audio controls src=...>` (not [sound:], which would autoplay) to Extra 2 and speaks only the Spanish sentence, no English and no notes. Same for existing notes that have an example but no player."
     ]
   },
   "Languages::🇪🇸 Spanish": {
