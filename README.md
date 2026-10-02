@@ -2,8 +2,7 @@
 
 [![CI](https://github.com/ikristina/anki-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ikristina/anki-mcp/actions/workflows/ci.yml)
 
-An MCP server that gives agents (Claude Code, Claude Desktop, …) access to your local Anki collection via
-[AnkiConnect](https://ankiweb.net/shared/info/2055492159).
+An MCP server that gives agents (Claude Code, Claude Desktop, …) access to your local Anki collection via [AnkiConnect](https://ankiweb.net/shared/info/2055492159).
 
 Blog post about building it: [ikristina.github.io/blog/anki-mcp-server](https://ikristina.github.io/blog/anki-mcp-server/).
 
@@ -39,21 +38,17 @@ Skills in `.claude/skills/`:
 1. In Anki: **Tools → Add-ons → Get Add-ons…**, enter code `2055492159`, and restart Anki.
 2. Keep Anki open whenever you use the server. AnkiConnect listens on `http://127.0.0.1:8765`.
 
-### 2. eSpeak NG (for Latin audio)
+### 2. A Latin voice (if you study Latin)
 
-Google's voices have no real Latin, so Latin uses eSpeak NG's Latin voice. ~~It's robotic, but the pronunciation is correct.~~
-It's robotic, and its pronunciation is often wrong.
+Google's voices have no real Latin. `eSpeak NG` has a Latin voice, and at first it seemed like a good option even though it is VERY robotic. In practice turned out that its pronunciation is often wrong, so I trained my own Classical Latin voice with Piper instead. It sounds far more natural. It's not shared (the base model's license forbids redistribution), but you can build the same one: [docs/building-a-tts-voice.md](docs/building-a-tts-voice.md). Install it as `piper:la_LA-vox-medium` (see [Audio voices](#audio-voices)).
+
+`eSpeak NG` is still needed: Piper uses its Latin rules to turn text into phonemes.
 
 ```bash
 brew install espeak-ng
 ```
 
 Check it: `espeak-ng --voices=la` should list `Latin`.
-
-**Better:** I trained my own Classical Latin voice with Piper, and it sounds far more natural than eSpeak. It's not
-shared (the base model's license forbids redistribution), but you can build the same one:
-[docs/building-a-tts-voice.md](docs/building-a-tts-voice.md). Install it as `piper:la_LA-vox-medium` (see
-[Audio voices](#audio-voices)). eSpeak is still needed: Piper uses its Latin rules to turn text into phonemes.
 
 ### 3. The server
 
@@ -70,14 +65,11 @@ uv run python scripts/smoke.py              # read-only check over stdio; Anki m
 claude mcp add anki --scope user -- uv --directory /absolute/path/to/anki-mcp run anki-mcp
 ```
 
-Then start a new Claude Code session and run `/mcp`: `anki` should show as connected.
-`--scope user` makes the tools available in every project. The skills only load when Claude Code runs inside this folder,
-unless you copy `.claude/skills/*` to `~/.claude/skills/`.
+Then start a new Claude Code session and run `/mcp`: `anki` should show as connected. `--scope user` makes the tools available in every project. The skills only load when Claude Code runs inside this folder, unless you copy `.claude/skills/*` to `~/.claude/skills/`.
 
 ### Other agents (Claude Desktop, Cursor, VS Code, Codex, Gemini CLI, …)
 
-MCP is agent-agnostic, so any MCP client can run this server. No clone is needed: `uvx` builds it straight from GitHub.
-Steps 1–2 (Anki + AnkiConnect, eSpeak) still apply.
+MCP is agent-agnostic, so any MCP client can run this server. No clone is needed: `uvx` builds it straight from GitHub. Steps 1–2 (Anki + AnkiConnect, Latin voice) still apply.
 
 The command every client runs:
 
@@ -85,11 +77,9 @@ The command every client runs:
 uvx --from git+https://github.com/ikristina/anki-mcp anki-mcp
 ```
 
-GUI apps often don't inherit your shell's `PATH`. If the server fails to start, replace `uvx` with its absolute path
-(`which uvx`, e.g. `/Users/you/.local/bin/uvx`).
+GUI apps often don't inherit your shell's `PATH`. If the server fails to start, replace `uvx` with its absolute path (`which uvx`, e.g. `/Users/you/.local/bin/uvx`).
 
-**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`), **Cursor** (`~/.cursor/mcp.json`),
-**Windsurf**, **Gemini CLI** (`~/.gemini/settings.json`), and most other clients use the `mcpServers` format:
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`), **Cursor** (`~/.cursor/mcp.json`), **Windsurf**, **Gemini CLI** (`~/.gemini/settings.json`), and most other clients use the `mcpServers` format:
 
 ```json
 {
@@ -124,20 +114,15 @@ command = "uvx"
 args = ["--from", "git+https://github.com/ikristina/anki-mcp", "anki-mcp"]
 ```
 
-The tools work the same everywhere. The **skills** (`.claude/skills/`) are Claude Code's format; with other agents, copy
-the relevant `SKILL.md` body into that agent's rules/instructions file. Deck-specific conventions live in deck profiles
-(below), not in the skills, so the skills work with any collection.
+The tools work the same everywhere. The **skills** (`.claude/skills/`) are Claude Code's format; with other agents, copy the relevant `SKILL.md` body into that agent's rules/instructions file. Deck-specific conventions live in deck profiles (below), not in the skills, so the skills work with any collection.
 
 ### Optional
 
-- `ANKI_CONNECT_URL`, if AnkiConnect isn't on `http://127.0.0.1:8765`
-  (`claude mcp add anki -e ANKI_CONNECT_URL=http://... -- ...`).
+- `ANKI_CONNECT_URL`, if AnkiConnect isn't on `http://127.0.0.1:8765` (`claude mcp add anki -e ANKI_CONNECT_URL=http://... -- ...`).
 
 ### Observability (optional): OpenTelemetry traces, metrics and logs
 
-The server always logs to stderr (Claude Code keeps it in its MCP logs; `ANKI_MCP_LOG_LEVEL=DEBUG` for more). To export
-traces, metrics and logs over OTLP/HTTP, install the `otel` extra and point it at a collector. The quickest local backend
-is Grafana's all-in-one image, which stores all three signals and has a UI at http://localhost:3000:
+The server always logs to stderr (Claude Code keeps it in its MCP logs; `ANKI_MCP_LOG_LEVEL=DEBUG` for more). To export traces, metrics and logs over OTLP/HTTP, install the `otel` extra and point it at a collector. The quickest local backend is Grafana's all-in-one image, which stores all three signals and has a UI at http://localhost:3000:
 
 ```bash
 docker run -d --name otel-lgtm -p 3000:3000 -p 4318:4318 grafana/otel-lgtm
@@ -145,51 +130,33 @@ claude mcp add anki --scope user -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost
   -- uv --directory /absolute/path/to/anki-mcp run --extra otel anki-mcp
 ```
 
-To fill Grafana with data without using an agent, generate traffic. The script starts its own server with exporting on
-and makes random read-only calls, dry-run writes and a few deliberate mistakes. It never writes to the collection:
+To fill Grafana with data without using an agent, generate traffic. The script starts its own server with exporting on and makes random read-only calls, dry-run writes and a few deliberate mistakes. It never writes to the collection:
 
 ```bash
 uv run --extra otel python scripts/otel_traffic.py              # 60 scenarios, about 2 minutes
 uv run --extra otel python scripts/otel_traffic.py --calls 300  # more data, for rate() and latency graphs
 ```
 
-Any OTLP backend works (Jaeger, Honeycomb, Grafana Cloud…); the standard `OTEL_*` variables apply
-(`OTEL_EXPORTER_OTLP_HEADERS` for API keys, `OTEL_SERVICE_NAME`, `OTEL_SDK_DISABLED=true`). Without an endpoint, nothing is exported.
+Any OTLP backend works (Jaeger, Honeycomb, Grafana Cloud…); the standard `OTEL_*` variables apply (`OTEL_EXPORTER_OTLP_HEADERS` for API keys, `OTEL_SERVICE_NAME`, `OTEL_SDK_DISABLED=true`). Without an endpoint, nothing is exported.
 
-- **Traces**: one span per tool call (`tools/call add_notes`, from the MCP SDK), with child spans per AnkiConnect
-  request (`ankiconnect findNotes`) and per audio clip (`tts google`). Failed calls carry the error message the model saw.
-- **Metrics**: `anki_mcp.tool.calls` / `anki_mcp.tool.duration` (by tool and outcome), `anki_mcp.ankiconnect.duration`
-  (by action), `anki_mcp.tts.duration` (by engine and voice; Google 429s show up here), `anki_mcp.notes.written` (by
-  operation and deck). Exported every 10s (`OTEL_METRIC_EXPORT_INTERVAL`).
+- **Traces**: one span per tool call (`tools/call add_notes`, from the MCP SDK), with child spans per AnkiConnect request (`ankiconnect findNotes`) and per audio clip (`tts google`). Failed calls carry the error message the model saw.
+- **Metrics**: `anki_mcp.tool.calls` / `anki_mcp.tool.duration` (by tool and outcome), `anki_mcp.ankiconnect.duration` (by action), `anki_mcp.tts.duration` (by engine and voice; Google 429s show up here), `anki_mcp.notes.written` (by operation and deck). Exported every 10s (`OTEL_METRIC_EXPORT_INTERVAL`).
 - **Logs**: writes (notes added, voiced, updated, synced) and tool errors.
 
-Note contents are never recorded, but error messages can quote the word being voiced. Queries, troubleshooting, and how
-to add the same to your own MCP server: [docs/observability.md](docs/observability.md).
+Note contents are never recorded, but error messages can quote the word being voiced. Queries, troubleshooting, and how to add the same to your own MCP server: [docs/observability.md](docs/observability.md).
 
 ### Obsidian (optional, for Yanki decks)
 
-This server never reads or writes Obsidian. It only spots Yanki decks (`source: yanki`) and refuses to add cards to
-them. To put new cards there, the agent has to write markdown into your vault by some other route: a separate
-Obsidian MCP server, or plain file access to the vault folder. Either works. A filesystem-based server such as
-[`obsidian-mcp`](https://www.npmjs.com/package/obsidian-mcp) (`claude mcp add obsidian -- npx -y obsidian-mcp /path/to/vault`)
-edits the files directly, so Obsidian doesn't need to be running. A server built on the Local REST API plugin needs
-Obsidian open but can also run commands. Either way, you still run **Yanki: Sync** in Obsidian to get the cards into
-Anki. Without either kind of access, the `flashcards` skill can still write cards for Anki-owned decks, but for Yanki
-decks it can only show you the markdown to paste in yourself.
+This server never reads or writes Obsidian. It only spots Yanki decks (`source: yanki`) and refuses to add cards to them. To put new cards there, the agent has to write markdown into your vault by some other route: a separate Obsidian MCP server, or plain file access to the vault folder. Either works. A filesystem-based server such as [`obsidian-mcp`](https://www.npmjs.com/package/obsidian-mcp) (`claude mcp add obsidian -- npx -y obsidian-mcp /path/to/vault`) edits the files directly, so Obsidian doesn't need to be running. A server built on the Local REST API plugin needs Obsidian open but can also run commands. Either way, you still run **Yanki: Sync** in Obsidian to get the cards into Anki. Without either kind of access, the `flashcards` skill can still write cards for Anki-owned decks, but for Yanki decks it can only show you the markdown to paste in yourself.
 
 ## Deck profiles
 
-Some things `describe_deck` can't infer: which voice a deck uses, which field is spoken, "nouns include the article".
-Save them once as a deck profile, and every session and agent follows them:
+Some things `describe_deck` can't infer: which voice a deck uses, which field is spoken, "nouns include the article". Save them once as a deck profile, and every session and agent follows them:
 
-- File: `~/.config/anki-mcp/profiles.json` (override with `ANKI_MCP_PROFILES=/path/to/file.json`). It's plain JSON, so
-  edit it by hand if you like. Nothing is written to your Anki collection.
-- `set_deck_profile` checks each profile against Anki before saving: the deck and note type must exist, the field names
-  must belong to that note type, and the voice must work.
-- Agents are told to save a profile only after you confirm it. The `language-cards` skill proposes one the first time
-  you add to a deck that has none.
-- [`examples/profiles.json`](examples/profiles.json) holds my Spanish, French and Latin profiles. To start from them,
-  copy the file to `~/.config/anki-mcp/profiles.json` and rename the decks to match yours.
+- File: `~/.config/anki-mcp/profiles.json` (override with `ANKI_MCP_PROFILES=/path/to/file.json`). It's plain JSON, so edit it by hand if you like. Nothing is written to your Anki collection.
+- `set_deck_profile` checks each profile against Anki before saving: the deck and note type must exist, the field names must belong to that note type, and the voice must work.
+- Agents are told to save a profile only after you confirm it. The `language-cards` skill proposes one the first time you add to a deck that has none.
+- [`examples/profiles.json`](examples/profiles.json) holds my Spanish, French and Latin profiles. To start from them, copy the file to `~/.config/anki-mcp/profiles.json` and rename the decks to match yours.
 
 ## Audio voices
 
@@ -198,15 +165,13 @@ Save them once as a deck profile, and every session and agent follows them:
 | Voice string | Engine | Needs | Used for |
 |---|---|---|---|
 | `es-MX`, `fr`, `de`, `pt-BR`, … | Google Translate (gTTS) | internet | Spanish, French (the same voices HyperTTS's GoogleTranslate service uses) |
-| `espeak:la` | eSpeak NG | `brew install espeak-ng` | ~~Latin~~ robotic fallback; prefer the Piper voice below |
+| `espeak:la` | eSpeak NG | `brew install espeak-ng` | Latin, but robotic and often mispronounced; I replaced it with the Piper voice below |
 | `macos:Alice` (any `say -v '?'` voice) | macOS `say` | macOS | natural offline voices |
 | `piper:la_LA-vox-medium` (any `<name>.onnx` + `.onnx.json` in `~/.local/share/piper-voices/`) | Piper (neural) | `uv tool install piper-tts` + the voice files | natural offline voices, incl. a self-trained Latin one ([how](docs/building-a-tts-voice.md)) |
 
 Google files are MP3; the offline engines produce M4A (AAC). Anki plays both.
 
-Listen before trusting a voice. Even a good one mispronounces rare words: Google `en-US` gets *chimerical* wrong where
-`en-GB` is right, and only `macos:Samantha` says *kvetch* correctly. To fix one card, clear its audio field in Anki
-and run `add_audio` on just that note with a different voice (or use `replace=True`).
+Listen before trusting a voice. Even a good one mispronounces rare words: Google `en-US` gets *chimerical* wrong where `en-GB` is right, and only `macos:Samantha` says *kvetch* correctly. To fix one card, clear its audio field in Anki and run `add_audio` on just that note with a different voice (or use `replace=True`).
 
 ## Development
 
@@ -223,4 +188,3 @@ Eval results and method: [docs/evals.md](docs/evals.md). See [LEARNINGS.md](LEAR
 
 ![screenshot](add-to-latin-deck.png)
 ![anki-preview](puella-rosam-amat.png)
-

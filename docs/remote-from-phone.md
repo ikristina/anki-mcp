@@ -1,8 +1,6 @@
 # Using anki-mcp from a phone or iPad
 
-This lets you ask Claude on your phone to tidy the cards you typed there and add audio, while you're away from the Mac.
-It is free: the MCP server still runs on the Mac, and you drive a Claude Code session there through
-**Remote Control**. The server needs no remote transport, tunnel or auth.
+This lets you ask Claude on your phone to tidy the cards you typed there and add audio, while you're away from the Mac. It is free: the MCP server still runs on the Mac, and you drive a Claude Code session there through **Remote Control**. The server needs no remote transport, tunnel or auth.
 
 ```
 phone (AnkiMobile) ──sync──▶ AnkiWeb ◀──sync tool── Anki on the Mac ◀── anki-mcp ◀── Claude Code session
@@ -15,8 +13,7 @@ Phase 4 of the [roadmap](../ROADMAP.md) (a remote HTTP server) would reach the s
 ## 1. Keep the Mac awake
 
 **System Settings:**
-- Laptop: Battery → Options → turn on *Prevent automatic sleeping on power adapter when the display is off*.
-  Keep it plugged in.
+- Laptop: Battery → Options → turn on *Prevent automatic sleeping on power adapter when the display is off*. Keep it plugged in.
 - Desktop (Mini, iMac, Studio): Energy → turn on *Prevent automatic sleeping when the display is off*.
 - Lock Screen → *Turn display off*: any value works. The display can sleep; the Mac must not.
 
@@ -27,9 +24,7 @@ pmset -g                            # check that it shows "sleep 0"
 ```
 Undo it when you're back: `sudo pmset -c sleep 1` (or your previous value, which `pmset -g` showed before the change).
 
-**Laptop lid:** a closed lid sleeps the Mac unless an external display is attached. Leave it open.
-`sudo pmset -a disablesleep 1` also works with the lid closed, but it's easy to forget, and a closed laptop runs
-warmer. Undo it with `sudo pmset -a disablesleep 0`.
+**Laptop lid:** a closed lid sleeps the Mac unless an external display is attached. Leave it open. `sudo pmset -a disablesleep 1` also works with the lid closed, but it's easy to forget, and a closed laptop runs warmer. Undo it with `sudo pmset -a disablesleep 0`.
 
 `caffeinate -dis` also works, but only while that terminal stays open.
 
@@ -37,16 +32,14 @@ warmer. Undo it with `sudo pmset -a disablesleep 0`.
 
 - System Settings → General → Software Update → Automatic Updates: turn off *Install macOS updates* and *Install Security Responses* until you're back.
 - Desktop Macs only: `sudo pmset autorestart 1` (or Energy → *Start up automatically after a power failure*).
-- **FileVault** stops the Mac at the password screen after any restart, so Anki and Claude won't come back by themselves.
-  Accept it: after a restart you have no Anki on the Mac until you're home. Your phone keeps working normally.
+- **FileVault** stops the Mac at the password screen after any restart, so Anki and Claude won't come back by themselves. Accept it: after a restart you have no Anki on the Mac until you're home. Your phone keeps working normally.
 - Add Anki to System Settings → General → Login Items anyway, which helps after short interruptions.
 
 ## 3. Keep Anki ready
 
 - Anki open, with AnkiConnect enabled, and **logged in to AnkiWeb** (press Sync once by hand to check).
 - No open dialogs. AnkiConnect waits while a modal is open, and the tools then time out.
-- **Don't change note types or fields while you're away** (for example, adding an Audio field). That forces a full sync, which needs someone at the Mac to choose which side to keep. The `sync` tool refuses full syncs and says so.
-  It doesn't hang.
+- **Don't change note types or fields while you're away** (for example, adding an Audio field). That forces a full sync, which needs someone at the Mac to choose which side to keep. The `sync` tool refuses full syncs and says so. It doesn't hang.
 
 ## 4. Start the Claude session
 
@@ -56,8 +49,7 @@ brew install tmux                      # once
 tmux new -s anki
 cd ~/Projects/anki-mcp && claude       # then type /remote-control
 ```
-Detach with `Ctrl-b d`. Reattach later with `tmux attach -t anki`. Open the session from the Claude app on your phone
-or iPad.
+Detach with `Ctrl-b d`. Reattach later with `tmux attach -t anki`. Open the session from the Claude app on your phone or iPad.
 
 ## 5. Daily flow
 

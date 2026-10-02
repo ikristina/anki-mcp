@@ -4,8 +4,7 @@ Instructions for coding agents working on this repo. (Claude Code reads this via
 
 ## What this is
 
-An MCP server (Python, stdio) that exposes a local Anki collection to agents through the AnkiConnect add-on
-(`http://127.0.0.1:8765`). Plus Claude Code skills in `.claude/skills/` that use it.
+An MCP server (Python, stdio) that exposes a local Anki collection to agents through the AnkiConnect add-on (`http://127.0.0.1:8765`). Plus Claude Code skills in `.claude/skills/` that use it.
 
 ## Commands
 
@@ -17,8 +16,7 @@ uv run anki-mcp                       # run the server (stdio); normally launche
 uv run python evals/run.py --case es-batch --models haiku   # agent evals via `claude -p` against FakeAnki + an Obsidian stub
 ```
 
-Run `pytest` after every change to `src/`, and the smoke test too when Anki is available. New tools need unit tests;
-extend `tests/conftest.py`'s `FakeAnki` when the server starts using a new AnkiConnect action or search term (it raises on unknown ones).
+Run `pytest` after every change to `src/`, and the smoke test too when Anki is available. New tools need unit tests; extend `tests/conftest.py`'s `FakeAnki` when the server starts using a new AnkiConnect action or search term (it raises on unknown ones).
 
 ## Layout
 
@@ -31,9 +29,7 @@ extend `tests/conftest.py`'s `FakeAnki` when the server starts using a new AnkiC
 - `tests/`: unit tests; `conftest.py` has `FakeAnki`, an in-memory AnkiConnect
 - `scripts/smoke.py`: stdio client that asserts on real tool results against the real collection
 - `scripts/otel_traffic.py`: random read-only/dry-run tool traffic with OTLP export on, to fill Grafana (see docs/observability.md)
-- `evals/`: agent evals. `run.py` runs `claude -p` per case in an isolated temp dir and scores the tool calls
-  (`cases.py`); `fake_server.py` (the server on `FakeAnki`) and `fake_obsidian.py` (record-only Obsidian stub) are
-  the only MCP servers it loads. `--rescore` re-applies changed checks to stored runs. Results: `docs/evals.md`
+- `evals/`: agent evals. `run.py` runs `claude -p` per case in an isolated temp dir and scores the tool calls (`cases.py`); `fake_server.py` (the server on `FakeAnki`) and `fake_obsidian.py` (record-only Obsidian stub) are the only MCP servers it loads. `--rescore` re-applies changed checks to stored runs. Results: `docs/evals.md`
 - `.claude/skills/`: `flashcards` (routes technical cards to Obsidian/Yanki) and `language-cards` (vocab + audio)
 - `LEARNINGS.md`: design notes and gotchas. **Append to it** whenever you learn something non-obvious.
 - `docs/remote-from-phone.md`: using the server from a phone via Claude Code Remote Control (Mac setup + daily flow)
@@ -43,16 +39,13 @@ extend `tests/conftest.py`'s `FakeAnki` when the server starts using a new AnkiC
 
 ## Rules
 
-- **MCP Python SDK is 2.x**: `from mcp.server.mcpserver import MCPServer`, not v1's `FastMCP`. Check the installed
-  package source before copying examples from the web.
-- Errors meant for the model must raise `AnkiError` (a `ToolError` subclass). Any other exception reaches the
-  model only as a generic "Error executing tool", and the message is lost.
+- **MCP Python SDK is 2.x**: `from mcp.server.mcpserver import MCPServer`, not v1's `FastMCP`. Check the installed package source before copying examples from the web.
+- Errors meant for the model must raise `AnkiError` (a `ToolError` subclass). Any other exception reaches the model only as a generic "Error executing tool", and the message is lost.
 - Error messages say what went wrong **and** what to do next (e.g. list similar deck names).
 - Keep results compact: paginate, strip HTML, truncate previews. The real collection has ~14k notes.
 - Never print to stdout in the server (stdout carries the protocol). Log to stderr.
 - **Never write to the user's real collection in tests.** Use `dry_run=True`. No delete tools without explicit request.
 - Decks with `source="yanki"` are generated from the user's Obsidian vault. `add_notes` must keep refusing them.
-- TTS wrappers must fail loudly on unsupported voices. Google's `la` and unknown macOS voices silently produce
-  wrong audio, so they are rejected explicitly.
+- TTS wrappers must fail loudly on unsupported voices. Google's `la` and unknown macOS voices silently produce wrong audio, so they are rejected explicitly.
 - Deck-specific conventions (deck names, voices, field rules) belong in deck profiles, not in skills or server code.
 - Tool descriptions and `Field` descriptions are the model's only documentation. Update them with any behavior change.
