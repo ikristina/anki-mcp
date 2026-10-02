@@ -1,21 +1,63 @@
 {
+  "Languages::Duo Norwegian (EN-NB)": {
+    "note_type": "Duo Norwegian (EN-NB)+",
+    "audio": {
+      "field": "Audio",
+      "voice": "no",
+      "text_field": "front"
+    },
+    "fields": {
+      "front": "Norwegian (Bokmål) word or phrase; nouns with article in parentheses, e.g. (en) mann, (en/ei) kvinne; verbs with å",
+      "back": "English meaning",
+      "inflections": "inflected forms, e.g. å gå, gikk gått",
+      "type": "one of noun, verb, adjective, adverb, phrase, idiom",
+      "subtype": "optional, e.g. infinitive, simple past, past participle, proper, time",
+      "from": "Duolingo skill : lesson, e.g. 'Animals 2 : *'"
+    },
+    "conventions": [
+      "Leave front_add, back_add, front_hint, back_hint, scratch empty unless the user asks.",
+      "Voice 'no' (Google Norwegian) reading front as-is, parenthesized articles included; the user approved how it sounds."
+    ]
+  },
+  "Languages::English": {
+    "note_type": "Cloze",
+    "audio": {
+      "field": "Back Extra",
+      "voice": "en-US",
+      "text_field": "Text"
+    },
+    "fields": {
+      "Text": "(part of speech) definition. Example sentence with the word as {{c1::word}}; an optional IPA transcription may follow the word inside the cloze, e.g. {{c1::virile /ˈvɪr.əl/}}",
+      "Back Extra": "audio only ([sound:...])"
+    },
+    "tags": [
+      "english"
+    ],
+    "conventions": [
+      "Audio speaks only the cloze word: use add_audio with cloze_only=true (IPA and hints are dropped).",
+      "For new notes via add_notes, set audio.text to the plain cloze word without transcription.",
+      "Google en-US (and en-CA) mispronounces some rare words, e.g. chimerical; en-GB got it right. If the user reports a wrong pronunciation, they clear Back Extra in Anki and you re-voice that one note with en-GB; if en-GB is wrong too, try macos:Samantha (used for kvetch)."
+    ]
+  },
   "Languages::Latin": {
     "note_type": "Basic (and reversed card)",
     "audio": {
       "field": "Audio",
-      "voice": "espeak:la",
+      "voice": "piper:la_LA-vox-medium",
       "text_field": "Front"
     },
     "fields": {
       "Front": "Latin word or sentence",
       "Back": "English translation"
     },
-    "tags": ["latin"],
+    "tags": [
+      "latin"
+    ],
     "conventions": [
       "Also tag 'duolingo' if the sentence comes from Duolingo.",
       "Never put the sound tag in Front too: the templates already play Audio with the Latin side.",
-      "Set audio.text to the plain Latin text so speech is never generated from HTML.",
-      "Voice is eSpeak on purpose: Google's 'la' is not Latin."
+      "Set audio.text to the plain Latin text with macrons (e.g. 'cīvitātēs'), even when Front has none: the voice takes vowel length and stress from them. Never generate speech from HTML.",
+      "Voice is a self-trained Classical Latin Piper voice; Google's 'la' is not Latin. Fallback: 'espeak:la'."
     ]
   },
   "Languages::SpanishRandom": {
@@ -26,13 +68,15 @@
       "text_field": "Learnable"
     },
     "fields": {
-      "Learnable": "Spanish word or sentence as the user encountered it, with correct spelling, accents and punctuation; nouns with article. Alternative accepted answers go AFTER the main one inside <span class=\"alt\">alt 1|alt 2</span>, never with ';'. The multiple-choice cards show only the main answer. Only near-identical variants are alts (see conventions); anything with a different word or pronunciation gets its own note.",
+      "Learnable": "Spanish word or sentence as the user encountered it, with correct spelling, accents and punctuation; nouns with article. Alternative accepted answers go AFTER the main one inside <span class=\"alt\">alt 1|alt 2</span>, never with ';'. The multiple-choice cards show only the main answer. Near-identical variants are alts, including tú/usted (formal/informal) forms of the same phrase unless the user says otherwise (see conventions); anything with a different word or pronunciation (su vs tu, piscina vs alberca) gets its own note.",
       "Definition": "natural English translation; if several are natural, list them separated by ' / '",
       "Choices": "REQUIRED (the multiple-choice cards are blank without it): exactly 5 wrong Spanish options separated by ' | ', each shaped like the answer (same length and structure). Words: look-alikes or sound-alikes and related-but-different words (atardecer -> el amanecer | la madrugada | el mediodía). Sentences: near-misses that change one thing: wrong conjugation or person, ser/estar, wrong preposition or article gender, a swapped content word (season, time of day, activity). NEVER a decoy that is also a correct answer for the English prompt: no tú/usted/ustedes swaps when the English 'you' is ambiguous, no valid synonyms, no regional variants, nothing listed in the alt span. No '|' inside an option.",
-      "Extra": "short context shown on the front. Required when the English prompt has several distinct Spanish answers split into separate notes, so the prompt says which one is wanted: 'informal' / 'formal' / 'Mexico' (e.g. tu piscina = informal, su piscina = formal, tu alberca = Mexico, informal). Otherwise empty.",
-      "Extra 2": "optional note shown on the back: register notes, literal meaning, all accepted variants spelled out (standard vs informal), sibling notes ('Formal: su piscina (own card)'), where it was heard; e.g. 'From Duolingo'"
+      "Extra": "short context shown on the front. Required when the English prompt has several distinct Spanish answers split into separate notes, so the prompt says which one is wanted: e.g. 'Mexico' (tu piscina vs tu alberca), or 'informal' / 'formal' when the user asked for separate notes. Otherwise empty.",
+      "Extra 2": "optional note shown on the back: register notes, literal meaning, all accepted variants spelled out (standard vs informal, tú vs usted), sibling notes, where it was heard; e.g. 'From Duolingo'"
     },
-    "tags": ["Spanish::Random"],
+    "tags": [
+      "Spanish::Random"
+    ],
     "conventions": [
       "Words and sentences both use this note type. Each note makes 4 cards: translation and listening, each as multiple choice and as type-in. The user dropped tapping cards on 2026-09-29 (little value, trivial for one-word items).",
       "Always fill Choices, also when tidying phone-added notes (they arrive with Choices empty), and include the decoys in the dry run so the user can review them.",
@@ -41,7 +85,8 @@
       "With alternatives, the main (non-alt) answer is the most standard one, and audio.text is that main answer only.",
       "When the user's phrasing is informal or nonstandard, keep it as an alt and mark it in Extra 2 rather than dropping it.",
       "Notes typed on the phone have only the main answer in Learnable and no audio. Alternatives may be written as plain text in Extra 2 (e.g. 'also: X | informal: Y') or, by mistake, in Choices (e.g. 'X; Y'). When tidying, move them into <span class=\"alt\">X|Y</span> after the main answer (or into separate notes, per the split rule), rewrite Extra 2 as a labelled note (Standard: ... / Very informal: ...), and replace Choices with real decoys.",
-      "Split rule (user, 2026-09-30): an alternative that uses a different word or sounds clearly different (tú vs usted conjugation, su vs tu, piscina vs alberca) is NOT an alt: it becomes its own note with its own audio, and each sibling gets a front Extra hint (informal / formal / Mexico) so the English prompt is unambiguous. Only near-identical variants stay as alts: dropped subject pronoun (yo/él/ellos), ellos/ellas, gender endings (amigo/amiga, perezoso/perezosa), punctuation."
+      "Formal vs informal (user, 2026-10-02, replaces the 2026-09-30 split rule for tú/usted): when the user does not specify, formal (usted) and informal (tú) forms of the same phrase are variants of ONE note: the form the user gave is the main answer, the other form goes in the alt span, no Extra hint, and Extra 2 labels them ('Informal (tú): ... / Formal (usted): ...'). Make separate notes with an Extra hint (informal / formal) only when the user asks for it. Different-word variants (su vs tu, piscina vs alberca) still split into their own notes with an Extra hint. Other near-identical variants stay alts: dropped subject pronoun (yo/él/ellos), ellos/ellas, gender endings (amigo/amiga, perezoso/perezosa), punctuation.",
+      "Example sentences only when the user asks for them: put them in Extra 2 (shown on the back only) as 'Example: <Spanish sentence> (<English translation>)', on a line before any other Extra 2 note. Never add examples unprompted, and never in Extra (it shows on the front)."
     ]
   },
   "Languages::🇪🇸 Spanish": {
@@ -58,9 +103,12 @@
       "Gender": "m, f or m/f for nouns; empty otherwise",
       "SynonymAid": "optional synonym that helps disambiguate"
     },
+    "tags": [
+      "Spanish::Added"
+    ],
     "conventions": [
       "Leave Word_suffix, Word_hint, Meaning_suffix, Meaning_hint empty.",
-      "Tag Spanish::Duolingo::<nn>_<Topic> if the user names a matching topic, otherwise Spanish::Added."
+      "Tag Spanish::Duolingo::<nn>_<Topic> if the user names a matching topic."
     ]
   },
   "Languages::🇫🇷 French": {
@@ -80,24 +128,6 @@
     "conventions": [
       "Leave Word_suffix, Word_hint, Meaning_suffix, Meaning_hint empty.",
       "Tag French::Duolingo::<nn>_<Topic> if the user names a matching topic, otherwise French::Added."
-    ]
-  },
-  "Languages::English": {
-    "note_type": "Cloze",
-    "audio": {
-      "field": "Back Extra",
-      "voice": "en-US",
-      "text_field": "Text"
-    },
-    "fields": {
-      "Text": "(part of speech) definition. Example sentence with the word as {{c1::word}}; an optional IPA transcription may follow the word inside the cloze, e.g. {{c1::virile /ˈvɪr.əl/}}",
-      "Back Extra": "audio only ([sound:...])"
-    },
-    "tags": ["english"],
-    "conventions": [
-      "Audio speaks only the cloze word: use add_audio with cloze_only=true (IPA and hints are dropped).",
-      "For new notes via add_notes, set audio.text to the plain cloze word without transcription.",
-      "Google en-US (and en-CA) mispronounces some rare words, e.g. chimerical; en-GB got it right. If the user reports a wrong pronunciation, they clear Back Extra in Anki and you re-voice that one note with en-GB; if en-GB is wrong too, try macos:Samantha (used for kvetch)."
     ]
   }
 }
