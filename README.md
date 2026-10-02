@@ -6,6 +6,8 @@ An MCP server that gives agents (Claude Code, Claude Desktop, …) access to you
 
 Blog post about building it: [ikristina.github.io/blog/anki-mcp-server](https://ikristina.github.io/blog/anki-mcp-server/).
 
+My other Anki project: [anki-new-tab](https://github.com/ikristina/anki-new-tab), a Chrome extension that turns every new tab into a quick review of due cards, with a Pomodoro timer. It also talks to Anki through AnkiConnect.
+
 | Tool | What it does |
 |---|---|
 | `list_decks` | Decks with counts and `source` (`anki` / `yanki` = synced from Obsidian / `mixed`) |
