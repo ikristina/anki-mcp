@@ -20,7 +20,7 @@ Run `pytest` after every change to `src/`, and the smoke test too when Anki is a
 
 ## Layout
 
-- `src/anki_mcp/server.py`: the MCP tools (`list_decks`, `describe_deck`, `list_note_types`, `search_notes`, `get_notes`, `get_weak_cards`, `add_notes`, `add_audio`, `update_notes`, `sync`, `get_deck_profile`, `set_deck_profile`)
+- `src/anki_mcp/server.py`: the MCP tools (`list_decks`, `describe_deck`, `list_note_types`, `search_notes`, `get_notes`, `get_weak_cards`, `add_notes`, `add_audio`, `update_notes`, `create_deck`, `sync`, `get_deck_profile`, `set_deck_profile`)
 - `src/anki_mcp/client.py`: AnkiConnect HTTP client and `AnkiError`
 - `src/anki_mcp/profiles.py`: deck profiles, a JSON file at `~/.config/anki-mcp/profiles.json` (`ANKI_MCP_PROFILES` overrides it; tests point it at a tmp dir)
 - `examples/profiles.json`: a sample of the maintainer's real profiles (not kept in sync)

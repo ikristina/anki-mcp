@@ -186,6 +186,11 @@ class FakeAnki:
             self.notes[nid]["tags"] += [t for t in tags.split() if t not in self.notes[nid]["tags"]]
         return None
 
+    def a_createDeck(self, deck):
+        parts = deck.split("::")  # like Anki, creates missing parents too
+        self.decks += [p for p in ("::".join(parts[:i]) for i in range(1, len(parts) + 1)) if p not in self.decks]
+        return len(self.decks)
+
     def a_sync(self):
         if self.sync_error:
             raise AnkiError(f"AnkiConnect error on 'sync': {self.sync_error}")

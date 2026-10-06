@@ -19,6 +19,7 @@ My other Anki project: [anki-new-tab](https://github.com/ikristina/anki-new-tab)
 | `get_deck_profile` / `set_deck_profile` | Your saved per-deck conventions (note type, audio field + voice, how to fill each field, tags, rules). Stored in a local JSON file, not in Anki |
 | `add_audio` | Adds pronunciation audio to *existing* notes that lack it; dry run by default, batches of ≤50, skips notes that already have audio. `replace=True` re-voices them (e.g. after switching voice), and `texts` sets the spoken text per note (e.g. with macrons) |
 | `update_notes` | Edits fields of existing notes and adds tags; dry run by default with an old → new diff, tags `mcp-edited`, refuses Yanki notes and edits that would drop audio |
+| `create_deck` | Creates an empty deck (and missing parents) so `add_notes` can use it; reports similar existing names, leaves an existing deck alone, supports `dry_run` |
 | `sync` | Syncs desktop Anki with AnkiWeb (normal syncs only; refuses a full sync and says why), so notes added on a phone can be tidied and voiced remotely. See [docs/remote-from-phone.md](docs/remote-from-phone.md) |
 | `add_notes` | Batch add with validation, `dry_run`, duplicate check, auto-tag `mcp-added`, optional free TTS audio; refuses Yanki-owned decks |
 

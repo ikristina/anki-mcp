@@ -30,10 +30,12 @@ async def main():
     async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
         await s.initialize()
         names = {t.name for t in (await s.list_tools()).tools}
-        expected = {"list_decks", "describe_deck", "search_notes", "get_notes", "get_weak_cards", "list_note_types", "add_notes", "add_audio", "update_notes", "sync", "get_deck_profile", "set_deck_profile"}
+        expected = {"list_decks", "describe_deck", "search_notes", "get_notes", "get_weak_cards", "list_note_types", "add_notes", "add_audio", "update_notes", "create_deck", "sync", "get_deck_profile", "set_deck_profile"}
         check("all tools registered", names == expected, ", ".join(sorted(names)))
 
         decks = items(await s.call_tool("list_decks", {}))
+        made = items(await s.call_tool("create_deck", {"deck": "Languages::🇪🇸 Spanish", "dry_run": True}))[0]
+        check("create_deck leaves an existing deck alone", made.get("exists") is True and made["created"] is False)
         prof = items(await s.call_tool("get_deck_profile", {"deck": "Nonexistent deck"}))[0]
         check("get_deck_profile explains a missing profile", prof["profile"] is None and "describe_deck" in prof["hint"])
         by_name = {d["deck"]: d for d in decks}

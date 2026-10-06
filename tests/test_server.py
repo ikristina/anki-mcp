@@ -2,7 +2,7 @@ import pytest
 
 from anki_mcp import server
 from anki_mcp.client import AnkiError
-from anki_mcp.server import (AudioSpec, NoteInput, NoteUpdate, add_audio, add_notes, describe_deck, get_notes, get_weak_cards, list_decks,
+from anki_mcp.server import (AudioSpec, NoteInput, NoteUpdate, add_audio, add_notes, create_deck, describe_deck, get_notes, get_weak_cards, list_decks,
                              list_note_types, search_notes, sync, update_notes)
 
 SPANISH = {"deck": "Languages::Spanish", "note_type": "Spanish"}
@@ -381,3 +381,22 @@ def test_add_notes_refuses_a_parent_made_only_of_yanki_subdecks(anki):
     assert out["summary"]["error"] == 1 and "Obsidian vault" in out["results"][0]["error"]
     assert "addNotes" not in anki.calls
     assert describe_deck("DDIA")["source"] == "yanki"
+
+
+def test_create_deck_creates_missing_parents_and_is_idempotent(anki):
+    assert create_deck("Hobbies::Chess", dry_run=True) == {"deck": "Hobbies::Chess", "created": False, "dry_run": True, "new_parents": ["Hobbies"]}
+    assert "Hobbies::Chess" not in anki.decks
+    assert create_deck("Hobbies::Chess")["created"] is True
+    assert {"Hobbies", "Hobbies::Chess"} <= set(anki.decks)
+    assert create_deck("Hobbies::Chess") == {"deck": "Hobbies::Chess", "created": False, "exists": True}
+
+
+def test_create_deck_points_out_similar_names(anki):
+    assert "Languages::Spanish" in create_deck("Languages::Spanish 2", dry_run=True)["similar_existing"]
+
+
+@pytest.mark.parametrize("name", ["", "Languages::", "::Spanish", "Languages:: Spanish", 'Say "hi"'])
+def test_create_deck_rejects_malformed_names(anki, name):
+    with pytest.raises(AnkiError, match="Invalid deck name"):
+        create_deck(name)
+    assert "createDeck" not in anki.calls

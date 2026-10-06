@@ -822,6 +822,38 @@ def sync() -> dict:
     return {"synced": True, "media": "transfers in the background; wait about a minute, then sync the phone"}
 
 
+@mcp.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=True, open_world_hint=False))
+def create_deck(
+    deck: Annotated[str, Field(description="Full deck name, subdecks separated by '::', e.g. 'Languages::Pimsleur Spanish 2'.")],
+    dry_run: Annotated[bool, Field(description="Check the name and report what would be created; create nothing.")] = False,
+) -> dict:
+    """Create an empty deck (and any missing parent decks), so add_notes can use it.
+
+    Only when the user asked for a new deck: check list_decks first, since a similar name usually means the deck
+    already exists under a slightly different name. An existing deck is left as is (created=False).
+    After creating a deck for a language, propose a deck profile (see get_deck_profile).
+    """
+    name = deck.strip()
+    parts = name.split("::")
+    if not name or any(not p.strip() for p in parts) or any(p != p.strip() for p in parts) or '"' in name:
+        raise AnkiError(f"Invalid deck name {deck!r}: use non-empty names without surrounding spaces or quotes, joined by '::'.")
+    decks = set(invoke("deckNames"))
+    if name in decks:
+        return {"deck": name, "created": False, "exists": True}
+    parents = ["::".join(parts[:i]) for i in range(1, len(parts))]
+    result = {"deck": name, "created": not dry_run, "dry_run": dry_run, "new_parents": [p for p in parents if p not in decks]}
+    # Compare last segments only: the full-name matcher flags every parent and sibling ('Languages', '...::English').
+    leaf = parts[-1].lower()
+    leaves = {d.split("::")[-1].lower(): d for d in decks}
+    close = difflib.get_close_matches(leaf, leaves, n=5, cutoff=0.6) + [l for l in leaves if leaf in l or l in leaf]
+    if similar := sorted({leaves[l] for l in close}):
+        result["similar_existing"] = similar
+    if not dry_run:
+        invoke("createDeck", deck=name)
+        log.info("created deck %s", name)
+    return result
+
+
 @mcp.tool(annotations=READ_ONLY)
 def get_deck_profile(
     deck: Annotated[str | None, Field(description="Exact deck name. Omit to list every saved profile.")] = None,

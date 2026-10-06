@@ -146,6 +146,9 @@ What building the suite taught (details and numbers in `docs/evals.md`):
 - **AGENTS.md** is the cross-agent instruction file (Codex, Cursor, Copilot, …). Claude Code reads CLAUDE.md, which can import it with `@AGENTS.md`, so there's one source of truth for all agents.
 - Skills (SKILL.md) are less portable than servers. Put *capabilities* in the server and *personal policy* in the skill, so other people get the useful part.
 
+- **`getDeckConfig` returns the preset, not the deck's effective limits.** A "This deck" new-cards/day override set in deck options (newer Anki) doesn't show up: the preset said 10/day while the deck really ran at 150. Don't quote study-time estimates from it without asking the user.
+- **Similar-name hints for a *new* deck must compare last segments only.** `_similar_decks` on the full name flags every parent and sibling (`Languages`, `Languages::English` for `Languages::Pimsleur Spanish 2`); `create_deck` matches the leaf against existing leaves instead.
+
 ## 6c. Observability (OpenTelemetry)
 
 - **MCP Python SDK 2.x already emits traces.** `OpenTelemetryMiddleware` is on by default and opens a SERVER span per request (`tools/call <tool>`, with `gen_ai.tool.name`), and it continues W3C trace context from `_meta`. It uses only `opentelemetry-api`, so it does nothing until someone installs an SDK provider. Our spans nest under it.
