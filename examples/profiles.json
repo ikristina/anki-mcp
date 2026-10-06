@@ -61,34 +61,26 @@
     ]
   },
   "Languages::SpanishRandom": {
-    "note_type": "Spanish MC + Typing",
+    "note_type": "Basic (and reversed card)",
     "audio": {
       "field": "Audio",
       "voice": "es-MX",
-      "text_field": "Learnable"
+      "text_field": "Front"
     },
     "fields": {
-      "Learnable": "Spanish word or sentence as the user encountered it, with correct spelling, accents and punctuation; nouns with article. EVERY valid Spanish translation of the English prompt is accepted: the main answer first, then all other valid ones inside <span class=\"alt\">alt 1|alt 2</span>, never with ';'. That includes synonyms (sabrosa/rica/deliciosa), regional variants, tú/usted, ser/estar when both fit, gender endings and punctuation. The multiple-choice cards show only the main answer.",
-      "Definition": "natural English translation; if several are natural, list them separated by ' / '",
-      "Choices": "REQUIRED (the multiple-choice cards are blank without it): exactly 5 wrong Spanish options separated by ' | ', each shaped like the answer (same length and structure). Words: look-alikes or sound-alikes and related-but-different words (atardecer -> el amanecer | la madrugada | el mediodía). Sentences: near-misses that change one thing: wrong conjugation or person, wrong tense, wrong preposition or article gender, a swapped content word (season, time of day, activity). NEVER a decoy that is also a valid translation of the English prompt: no valid synonyms, no tú/usted swaps, no regional variants, nothing listed in the alt span. No '|' inside an option.",
-      "Extra": "short context shown on the front. Normally empty. Only for the rare case where the user asked for separate notes and the English prompt needs a hint to tell them apart (e.g. 'informal' / 'formal').",
-      "Extra 2": "optional note shown on the back: which alt is common where (e.g. 'sabrosa: Mexico; rica: Spain'), register notes, literal meaning, where it was heard; e.g. 'From Duolingo'"
+      "Front": "Spanish word or sentence as the user encountered it, correct spelling, accents and punctuation; nouns with article. Only the main answer, no HTML. A short alternative (gender ending, synonym) may follow in brackets, e.g. 'cansado (cansada)'; leave long alternatives out.",
+      "Back": "natural English translation; several natural ones separated by ' / '. A short note may follow in brackets (under ~40 chars), e.g. '(informal)', '(From Duolingo)'; leave long notes out.",
+      "Audio": "filled by the audio step ([sound:...]); never write it by hand"
     },
     "tags": [
       "Spanish::Random"
     ],
     "conventions": [
-      "Words and sentences both use this note type. Each note makes 4 cards: translation and listening, each as multiple choice and as type-in. The user dropped tapping cards on 2026-09-29 (little value, trivial for one-word items).",
+      "Plain two-way type (user, 2026-10-04): card 1 Spanish->English, card 2 English->Spanish. It replaced the custom 'Spanish MC + Typing' type, which broke on AnkiDroid. No choices/decoys, no <span class=\"alt\"> markup.",
       "This deck is for everything the user adds by hand, unrelated to Pimsleur.",
-      "Always fill Choices, also when tidying phone-added notes (they arrive with Choices empty), and include the decoys in the dry run so the user can review them.",
-      "Leave Mems empty. Attributes is optional: 'noun' / 'verb' to tell apart pairs like el atardecer / atardecer.",
-      "If the user says where the word or sentence came from, put it in Extra 2.",
-      "ALTS RULE (user, 2026-10-02, replaces the 2026-09-30 split rule): if something is a valid translation of the English prompt, it is an alt on the SAME note, never a separate note. Add the closest natural translations as alts even when the user gave only one (synonyms, regional variants, tú/usted, ser/estar when both fit). Make separate notes only when the user asks for them. Skip loose or stronger/weaker variants (e.g. buenísima, exquisita for 'tasty').",
-      "The main (non-alt) answer is the form the user gave, normalized; audio.text is that main answer only. Alts are never spoken.",
-      "Mark regional preference in Extra 2, e.g. 'Sabrosa is common in Mexico; rica in Spain'. Label tú/usted forms there ('Informal (tú): ... / Formal (usted): ...').",
-      "Notes typed on the phone have only the main answer in Learnable and no audio. Alternatives may be written as plain text in Extra 2 (e.g. 'also: X | informal: Y') or, by mistake, in Choices (e.g. 'X; Y'). When tidying, move them into <span class=\"alt\">X|Y</span> after the main answer, rewrite Extra 2 as a labelled note (Standard: ... / Very informal: ...), and replace Choices with real decoys.",
-      "Example sentences only when the user asks for them: put them in Extra 2 (shown on the back only) as 'Example: <Spanish sentence> (<English translation>)', on a line before any other Extra 2 note. Never add examples unprompted, and never in Extra (it shows on the front).",
-      "EVERY example sentence gets tap-to-play audio (user, 2026-10-02), always, without asking. After add_notes, run `uv run python scripts/example_audio.py <note_id>=\"<Spanish sentence only>\" ...` for each new note with an example. It appends `<br><audio controls src=...>` (not [sound:], which would autoplay) to Extra 2 and speaks only the Spanish sentence, no English and no notes. Same for existing notes that have an example but no player."
+      "Example sentences are their own notes: Front = Spanish sentence, Back = English translation, extra tag 'example', with their own audio. Only when the user asks for examples; never add them unprompted.",
+      "Audio speaks only the Spanish Front text, without the bracketed alternative (set audio.text to the main answer).",
+      "If the user says where the word came from, put it in brackets at the end of Back, e.g. '(From Duolingo)'."
     ]
   },
   "Languages::🇪🇸 Spanish": {
@@ -111,25 +103,6 @@
     "conventions": [
       "Leave Word_suffix, Word_hint, Meaning_suffix, Meaning_hint empty.",
       "Tag Spanish::Duolingo::<nn>_<Topic> if the user names a matching topic."
-    ]
-  },
-  "Languages::🇫🇷 French": {
-    "note_type": "French",
-    "audio": {
-      "field": "Sound",
-      "voice": "fr",
-      "text_field": "Word"
-    },
-    "fields": {
-      "Word": "French word, nouns with article (le copain); expressions as-is",
-      "Meaning": "short English meaning",
-      "WordType": "one of N, NPl, V, Adj, Adv, Expr, Prep, Pron, Conj, Num",
-      "Gender": "m, f or m/f for nouns; empty otherwise",
-      "SynonymAid": "optional synonym that helps disambiguate"
-    },
-    "conventions": [
-      "Leave Word_suffix, Word_hint, Meaning_suffix, Meaning_hint empty.",
-      "Tag French::Duolingo::<nn>_<Topic> if the user names a matching topic, otherwise French::Added."
     ]
   }
 }
