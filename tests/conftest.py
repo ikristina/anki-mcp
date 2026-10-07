@@ -5,8 +5,10 @@ search term raises, so a test fails loudly if the server starts relying on somet
 """
 
 import fnmatch
+import json
 import re
 import shlex
+import zipfile
 
 import pytest
 
@@ -190,6 +192,19 @@ class FakeAnki:
         parts = deck.split("::")  # like Anki, creates missing parents too
         self.decks += [p for p in ("::".join(parts[:i]) for i in range(1, len(parts) + 1)) if p not in self.decks]
         return len(self.decks)
+
+    def a_exportPackage(self, deck, path, includeSched=False):
+        if deck not in self.decks:
+            return False
+        sounds = {s for nid in self._find(f'"deck:{deck}"') for v in self.notes[nid]["fields"].values()
+                  for s in re.findall(r"\[sound:([^\]]+)\]", v)}
+        self.exported = {"deck": deck, "path": path, "includeSched": includeSched}
+        with zipfile.ZipFile(path, "w") as z:  # the real layout: collection, media map, media files named 0..n-1
+            z.writestr("collection.anki21", b"fake")
+            z.writestr("media", json.dumps({str(i): name for i, name in enumerate(sorted(sounds))}))
+            for i, _ in enumerate(sorted(sounds)):
+                z.writestr(str(i), b"ID3fake")
+        return True
 
     def a_sync(self):
         if self.sync_error:

@@ -9,8 +9,11 @@ Design rules (see LEARNINGS.md):
 import base64
 import difflib
 import html
+import os
 import re
+import zipfile
 from collections import Counter
+from pathlib import Path
 from typing import Annotated
 
 from mcp.server.mcpserver import MCPServer
@@ -852,6 +855,48 @@ def create_deck(
         invoke("createDeck", deck=name)
         log.info("created deck %s", name)
     return result
+
+
+@mcp.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=True, open_world_hint=False))
+def export_deck(
+    deck: Annotated[str, Field(description="Exact deck name from list_decks. Its subdecks are included.")],
+    path: Annotated[str | None, Field(description="Absolute path ending in .apkg ('~' allowed). If the user hasn't said where, ask them before exporting. Default: <$ANKI_MCP_EXPORT_DIR, else ~/Desktop>/<last part of the deck name>.apkg.")] = None,
+    include_scheduling: Annotated[bool, Field(description="True: keep the user's review history and due dates (a backup). False: every card is new (to share).")] = False,
+    overwrite: Annotated[bool, Field(description="Replace an existing file at path.")] = False,
+) -> dict:
+    """Export a deck as an .apkg file (notes, card templates and audio/images), e.g. to share it or back it up.
+
+    The file is written on this computer; the collection doesn't change. The importer gets the full deck name,
+    parents included ('Languages::Pimsleur Russian 1' arrives under 'Languages'); they can rename it in Anki.
+    Ask the user where to save it unless they already said; the result's path tells them where it went.
+    """
+    decks = set(invoke("deckNames"))
+    if deck not in decks:
+        raise AnkiError(f"Deck '{deck}' does not exist. Similar: {_similar_decks(deck, decks) or 'none'}. Use list_decks.")
+    default_dir = Path(os.environ.get("ANKI_MCP_EXPORT_DIR") or Path.home() / "Desktop").expanduser()
+    target = Path(path).expanduser() if path else default_dir / f"{deck.split('::')[-1]}.apkg"
+    if not target.is_absolute() or target.suffix != ".apkg":
+        raise AnkiError(f"Path {path!r} must be absolute and end in .apkg, e.g. '~/Desktop/{deck.split('::')[-1]}.apkg'.")
+    if not target.parent.is_dir():
+        raise AnkiError(f"Folder {str(target.parent)!r} does not exist. Pick an existing folder, e.g. ~/Desktop.")
+    if target.exists() and not overwrite:
+        raise AnkiError(f"{str(target)!r} already exists. Pass overwrite=True to replace it, or choose another path.")
+    if not invoke("exportPackage", timeout=300, deck=deck, path=str(target), includeSched=include_scheduling):
+        raise AnkiError(f"Anki did not export '{deck}'. Ask the user to check the Anki window for an error.")
+    try:
+        with zipfile.ZipFile(target) as z:  # media files are stored as entries named 0, 1, 2, ...
+            media = sum(name.isdigit() for name in z.namelist())
+    except (OSError, zipfile.BadZipFile) as e:
+        raise AnkiError(f"Anki reported success but {str(target)!r} is not a readable .apkg ({e}). Ask the user to export from Anki: File > Export.") from e
+    log.info("exported deck %s to %s", deck, target)
+    return {
+        "deck": deck,
+        "path": str(target),
+        "notes": len(invoke("findNotes", query=_deck_term(deck))),
+        "media_files": media,
+        "bytes": target.stat().st_size,
+        "include_scheduling": include_scheduling,
+    }
 
 
 @mcp.tool(annotations=READ_ONLY)

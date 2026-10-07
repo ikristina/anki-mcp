@@ -2,7 +2,7 @@ import pytest
 
 from anki_mcp import server
 from anki_mcp.client import AnkiError
-from anki_mcp.server import (AudioSpec, NoteInput, NoteUpdate, add_audio, add_notes, create_deck, describe_deck, get_notes, get_weak_cards, list_decks,
+from anki_mcp.server import (AudioSpec, NoteInput, NoteUpdate, add_audio, add_notes, create_deck, describe_deck, export_deck, get_notes, get_weak_cards, list_decks,
                              list_note_types, search_notes, sync, update_notes)
 
 SPANISH = {"deck": "Languages::Spanish", "note_type": "Spanish"}
@@ -400,3 +400,39 @@ def test_create_deck_rejects_malformed_names(anki, name):
     with pytest.raises(AnkiError, match="Invalid deck name"):
         create_deck(name)
     assert "createDeck" not in anki.calls
+
+
+def test_export_deck_writes_apkg_without_scheduling_by_default(anki, tmp_path):
+    out = export_deck("Languages::Latin", path=str(tmp_path / "latin.apkg"))
+    assert out == {"deck": "Languages::Latin", "path": str(tmp_path / "latin.apkg"), "notes": 3, "media_files": 1,
+                   "bytes": (tmp_path / "latin.apkg").stat().st_size, "include_scheduling": False}
+    assert anki.exported["includeSched"] is False
+
+
+def test_export_deck_defaults_to_desktop_and_never_overwrites_silently(anki, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("ANKI_MCP_EXPORT_DIR", raising=False)
+    (tmp_path / "Desktop").mkdir()
+    assert export_deck("Languages::Latin", include_scheduling=True)["path"] == str(tmp_path / "Desktop" / "Latin.apkg")
+    assert anki.exported["includeSched"] is True
+    with pytest.raises(AnkiError, match="already exists"):
+        export_deck("Languages::Latin")
+    assert export_deck("Languages::Latin", overwrite=True)["notes"] == 3
+
+
+def test_export_deck_default_folder_comes_from_env(anki, tmp_path, monkeypatch):
+    monkeypatch.setenv("ANKI_MCP_EXPORT_DIR", str(tmp_path / "drive"))
+    (tmp_path / "drive").mkdir()
+    assert export_deck("Languages::Latin")["path"] == str(tmp_path / "drive" / "Latin.apkg")
+
+
+@pytest.mark.parametrize("deck, path, error", [
+    ("Languages::Latn", None, "does not exist. Similar: .*Languages::Latin"),
+    ("Languages::Latin", "latin.apkg", "must be absolute"),
+    ("Languages::Latin", "/tmp/latin.zip", "end in .apkg"),
+    ("Languages::Latin", "/no/such/folder/latin.apkg", "does not exist. Pick an existing folder"),
+])
+def test_export_deck_checks_deck_and_path_before_exporting(anki, deck, path, error):
+    with pytest.raises(AnkiError, match=error):
+        export_deck(deck, path=path)
+    assert "exportPackage" not in anki.calls

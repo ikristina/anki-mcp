@@ -20,6 +20,7 @@ My other Anki project: [anki-new-tab](https://github.com/ikristina/anki-new-tab)
 | `add_audio` | Adds pronunciation audio to *existing* notes that lack it; dry run by default, batches of ≤50, skips notes that already have audio. `replace=True` re-voices them (e.g. after switching voice), and `texts` sets the spoken text per note (e.g. with macrons) |
 | `update_notes` | Edits fields of existing notes and adds tags; dry run by default with an old → new diff, tags `mcp-edited`, refuses Yanki notes and edits that would drop audio |
 | `create_deck` | Creates an empty deck (and missing parents) so `add_notes` can use it; reports similar existing names, leaves an existing deck alone, supports `dry_run` |
+| `export_deck` | Writes a deck (with subdecks and media) to an `.apkg` file to share or back up; review history only if asked; never overwrites silently |
 | `sync` | Syncs desktop Anki with AnkiWeb (normal syncs only; refuses a full sync and says why), so notes added on a phone can be tidied and voiced remotely. See [docs/remote-from-phone.md](docs/remote-from-phone.md) |
 | `add_notes` | Batch add with validation, `dry_run`, duplicate check, auto-tag `mcp-added`, optional free TTS audio; refuses Yanki-owned decks |
 
@@ -122,6 +123,7 @@ The tools work the same everywhere. The **skills** (`.claude/skills/`) are Claud
 ### Optional
 
 - `ANKI_CONNECT_URL`, if AnkiConnect isn't on `http://127.0.0.1:8765` (`claude mcp add anki -e ANKI_CONNECT_URL=http://... -- ...`).
+- `ANKI_MCP_EXPORT_DIR`: the folder `export_deck` uses when no path is given (default `~/Desktop`), e.g. a synced Google Drive or Dropbox folder.
 
 ### Observability (optional): OpenTelemetry traces, metrics and logs
 

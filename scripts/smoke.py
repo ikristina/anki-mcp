@@ -1,12 +1,14 @@
 """Talk to the server over stdio exactly like Claude Code does, and check the answers.
 
-Read-only: add_notes runs with dry_run. Exits non-zero if any check fails.
+Read-only: add_notes runs with dry_run; export_deck writes only to a temp folder. Exits non-zero if any check fails.
 Run: uv run python scripts/smoke.py
 """
 
 import asyncio
 import json
 import sys
+import tempfile
+from pathlib import Path
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -30,12 +32,15 @@ async def main():
     async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
         await s.initialize()
         names = {t.name for t in (await s.list_tools()).tools}
-        expected = {"list_decks", "describe_deck", "search_notes", "get_notes", "get_weak_cards", "list_note_types", "add_notes", "add_audio", "update_notes", "create_deck", "sync", "get_deck_profile", "set_deck_profile"}
+        expected = {"list_decks", "describe_deck", "search_notes", "get_notes", "get_weak_cards", "list_note_types", "add_notes", "add_audio", "update_notes", "create_deck", "export_deck", "sync", "get_deck_profile", "set_deck_profile"}
         check("all tools registered", names == expected, ", ".join(sorted(names)))
 
         decks = items(await s.call_tool("list_decks", {}))
         made = items(await s.call_tool("create_deck", {"deck": "Languages::🇪🇸 Spanish", "dry_run": True}))[0]
         check("create_deck leaves an existing deck alone", made.get("exists") is True and made["created"] is False)
+        with tempfile.TemporaryDirectory() as tmp:  # writes a file outside the collection, never the collection itself
+            exp = items(await s.call_tool("export_deck", {"deck": "Go", "path": f"{tmp}/go.apkg"}))[0]
+            check("export_deck writes an .apkg", Path(exp["path"]).stat().st_size > 0 and exp["notes"] > 0, f"{exp['notes']} notes, {exp['bytes']} bytes")
         prof = items(await s.call_tool("get_deck_profile", {"deck": "Nonexistent deck"}))[0]
         check("get_deck_profile explains a missing profile", prof["profile"] is None and "describe_deck" in prof["hint"])
         by_name = {d["deck"]: d for d in decks}
