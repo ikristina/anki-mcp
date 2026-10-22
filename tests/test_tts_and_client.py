@@ -76,3 +76,16 @@ def test_piper_audio_is_m4a(monkeypatch):
     monkeypatch.setattr(tts, "_to_m4a", lambda audio, suffix: b"m4a:" + audio)
     name, data = tts.synthesize("amīcus", "piper:v")
     assert name.endswith(".m4a") and data == b"m4a:wav"
+
+
+def test_edge_voice_name_is_checked():
+    tts.validate_voice("edge:es-MX-JorgeNeural")
+    with pytest.raises(AnkiError, match="es-MX-JorgeNeural"):
+        tts.validate_voice("edge:jorge")
+
+
+def test_edge_audio_is_mp3(monkeypatch):
+    monkeypatch.setattr(tts, "_edge", lambda text, voice: b"mp3")
+    name, data = tts.synthesize("hola", "edge:es-MX-JorgeNeural")
+    assert name.endswith(".mp3") and data == b"mp3"
+

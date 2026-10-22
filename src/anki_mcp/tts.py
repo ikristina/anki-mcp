@@ -1,13 +1,17 @@
-"""Free text-to-speech. Four engines, chosen by the voice string:
+"""Free text-to-speech. Five engines, chosen by the voice string:
 
 - 'es-MX', 'fr', ...   Google Translate voices via gTTS (online). The same voices HyperTTS's GoogleTranslate uses.
 - 'espeak:la'          eSpeak NG (offline, robotic, but has real rules for languages Google lacks, e.g. Latin).
 - 'macos:Alice'        A macOS `say` voice (offline, natural). Run `say -v '?'` to list them.
 - 'piper:la_LA-vox-medium'  A Piper neural voice (offline, natural): <name>.onnx + .onnx.json in PIPER_VOICES.
+- 'edge:es-MX-JorgeNeural'  A Microsoft Edge neural voice via the unofficial `edge-tts` package (online, no key).
 """
+
+import asyncio
 
 import hashlib
 import io
+import re
 import shutil
 import struct
 import subprocess
@@ -15,6 +19,7 @@ import tempfile
 import wave
 from pathlib import Path
 
+import edge_tts
 from gtts import gTTS
 from gtts.lang import tts_langs
 
@@ -47,8 +52,10 @@ def validate_voice(voice: str) -> None:
         _check_macos_voice(name)
     elif engine == "piper":
         _piper_model(name)
+    elif engine == "edge":
+        _check_edge_voice(name)
     else:
-        raise AnkiError(f"Unknown TTS engine '{engine}'. Use 'es-MX' (Google), 'espeak:la', 'macos:Alice' or 'piper:<voice>'.")
+        raise AnkiError(f"Unknown TTS engine '{engine}'. Use 'es-MX' (Google), 'espeak:la', 'macos:Alice', 'piper:<voice>' or 'edge:<voice>'.")
 
 
 def synthesize(text: str, voice: str) -> tuple[str, bytes]:
@@ -64,8 +71,10 @@ def synthesize(text: str, voice: str) -> tuple[str, bytes]:
                 data, ext = _to_m4a(_say_aiff(text, name), ".aiff"), "m4a"
             elif engine == "piper":
                 data, ext = _to_m4a(_piper_wav(text, name), ".wav"), "m4a"
+            elif engine == "edge":
+                data, ext = _edge(text, name), "mp3"
             else:
-                raise AnkiError(f"Unknown TTS engine '{engine}'. Use 'es-MX' (Google), 'espeak:la', 'macos:Alice' or 'piper:<voice>'.")
+                raise AnkiError(f"Unknown TTS engine '{engine}'. Use 'es-MX' (Google), 'espeak:la', 'macos:Alice', 'piper:<voice>' or 'edge:<voice>'.")
         except subprocess.CalledProcessError as e:
             raise AnkiError(f"{engine} TTS failed for {text!r}: {e.stderr.decode(errors='replace').strip() or e}") from e
         span.set_attribute("tts.audio_bytes", len(data))
@@ -88,6 +97,29 @@ def _google(text: str, voice: str) -> bytes:
     except Exception as e:  # network errors, rate limits
         raise AnkiError(f"Audio generation failed for {text!r} ({voice}): {e}. Retry, or add the note without audio.") from e
     return buf.getvalue()
+
+
+def _check_edge_voice(voice: str) -> None:
+    if not re.fullmatch(r"[a-z]{2,3}-[A-Z]{2}-\w+Neural", voice):
+        raise AnkiError(f"Edge voice '{voice}' is not like 'es-MX-JorgeNeural'. Male Spanish: es-MX-JorgeNeural, "
+                        "es-ES-AlvaroNeural, es-AR-TomasNeural, es-CO-GonzaloNeural, es-US-AlonsoNeural.")
+
+
+def _edge(text: str, voice: str) -> bytes:
+    _check_edge_voice(voice)
+
+    async def run() -> bytes:
+        chunks = [c["data"] async for c in edge_tts.Communicate(text, voice).stream() if c["type"] == "audio"]
+        if not chunks:
+            raise AnkiError(f"Edge has no voice '{voice}' (no audio came back). List them with `uvx edge-tts --list-voices`.")
+        return b"".join(chunks)
+
+    try:
+        return asyncio.run(run())
+    except AnkiError:
+        raise
+    except Exception as e:  # network errors, endpoint changes (the API is unofficial)
+        raise AnkiError(f"Edge audio generation failed for {text!r} ({voice}): {e}. Retry, or add the note without audio.") from e
 
 
 def _require(binary: str, hint: str) -> None:

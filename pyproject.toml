@@ -5,7 +5,7 @@ description = "MCP server that lets agents search, analyze, and add Anki notes v
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["mcp>=2.2,<3", "gtts>=2.5"]
+dependencies = ["mcp>=2.2,<3", "gtts>=2.5", "edge-tts>=7"]
 
 [project.scripts]
 anki-mcp = "anki_mcp.server:main"

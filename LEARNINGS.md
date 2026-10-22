@@ -164,3 +164,9 @@ What building the suite taught (details and numbers in `docs/evals.md`):
 - **Host**: the app running the model (Claude Code). **Client**: the host's connection to one server. **Server**: your program.
 - **JSON-RPC**: the wire protocol MCP uses. **Structured output**: tools can return typed JSON alongside text.
 - **Agent loop**: model → tool call → result → model… until done. Your tool results are fed back into that loop.
+
+## edge TTS engine (2026-10-22)
+- `edge:<voice>` uses the unofficial `edge-tts` package (Edge Read Aloud endpoint; online, no key, MP3 out, no afconvert).
+  Male Spanish: `es-MX-JorgeNeural`, `es-ES-AlvaroNeural`, `es-AR-TomasNeural`, `es-CO-GonzaloNeural`, `es-US-AlonsoNeural`.
+  Unofficial, so it can break; errors tell the user to retry or add the note without audio. The official route is
+  Azure AI Speech (free F0 tier, ~500k chars/month, needs a key) if this ever stops working.

@@ -449,7 +449,7 @@ class AudioSpec(_AgentInput):
     voice: str = Field(
         description="Google voice as language[-REGION] ('es-MX', 'fr', 'de', 'pt-BR', 'no'), "
         "or an offline engine: 'espeak:<lang>' (e.g. 'espeak:la' for Latin), 'macos:<Voice>' (e.g. 'macos:Alice') "
-        "or 'piper:<voice>' (a local neural voice, e.g. 'piper:la_LA-vox-medium'). Use the deck profile's voice."
+        "or 'piper:<voice>' (a local neural voice, e.g. 'piper:la_LA-vox-medium') or 'edge:<voice>' (Microsoft neural, e.g. 'edge:es-MX-JorgeNeural'). Use the deck profile's voice."
     )
     text: str | None = Field(
         default=None,
@@ -622,7 +622,7 @@ def add_audio(
         str,
         Field(
             description="Latin: 'espeak:la' (Google's 'la' is NOT Latin and is rejected). Spanish: 'es-MX'. French: 'fr'. "
-            "Other: Google 'de', 'pt-BR', …, or offline 'espeak:<lang>' / 'macos:<Voice>' / 'piper:<voice>'. "
+            "Other: Google 'de', 'pt-BR', …, or offline 'espeak:<lang>' / 'macos:<Voice>' / 'piper:<voice>' / 'edge:<voice>'. "
             "Prefer the deck profile's voice."
         ),
     ],

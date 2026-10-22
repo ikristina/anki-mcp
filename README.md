@@ -172,6 +172,7 @@ Some things `describe_deck` can't infer: which voice a deck uses, which field is
 | `es-MX`, `fr`, `de`, `pt-BR`, … | Google Translate (gTTS) | internet | Spanish, French (the same voices HyperTTS's GoogleTranslate service uses) |
 | `espeak:la` | eSpeak NG | `brew install espeak-ng` | Latin, but robotic and often mispronounced; I replaced it with the Piper voice below |
 | `macos:Alice` (any `say -v '?'` voice) | macOS `say` | macOS | natural offline voices |
+| `edge:es-MX-JorgeNeural` (male: also `es-ES-AlvaroNeural`, `es-AR-TomasNeural`) | Microsoft Edge neural, via unofficial `edge-tts` | internet; no key | natural online voices incl. male Spanish; unofficial endpoint, may break |
 | `piper:la_LA-vox-medium` (any `<name>.onnx` + `.onnx.json` in `~/.local/share/piper-voices/`) | Piper (neural) | `uv tool install piper-tts` + the voice files | natural offline voices, incl. a self-trained Latin one ([how](docs/building-a-tts-voice.md)) |
 
 Google files are MP3; the offline engines produce M4A (AAC). Anki plays both.
