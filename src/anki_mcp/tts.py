@@ -1,10 +1,11 @@
-"""Free text-to-speech. Five engines, chosen by the voice string:
+"""Free text-to-speech. Five engines (plus 'random:'), chosen by the voice string:
 
 - 'es-MX', 'fr', ...   Google Translate voices via gTTS (online). The same voices HyperTTS's GoogleTranslate uses.
 - 'espeak:la'          eSpeak NG (offline, robotic, but has real rules for languages Google lacks, e.g. Latin).
 - 'macos:Alice'        A macOS `say` voice (offline, natural). Run `say -v '?'` to list them.
 - 'piper:la_LA-vox-medium'  A Piper neural voice (offline, natural): <name>.onnx + .onnx.json in PIPER_VOICES.
 - 'edge:es-MX-JorgeNeural'  A Microsoft Edge neural voice via the unofficial `edge-tts` package (online, no key).
+- 'random:es-MX,edge:es-MX-JorgeNeural'  Any of the listed voices, picked per text (the same text always gets the same voice).
 """
 
 import asyncio
@@ -36,8 +37,27 @@ _REGION_TLD = {
 _GOOGLE_FAKE = {"la"}
 
 
+def resolve_voice(text: str, voice: str) -> str:
+    """'random:a,b' -> one of its voices, chosen by a hash of the text so a note keeps its voice across runs."""
+    if not voice.startswith("random:"):
+        return voice
+    options = _random_options(voice)
+    return options[int(hashlib.sha224(text.encode()).hexdigest(), 16) % len(options)]
+
+
+def _random_options(voice: str) -> list[str]:
+    options = [v.strip() for v in voice.removeprefix("random:").split(",") if v.strip()]
+    if len(options) < 2 or any(o.startswith("random:") for o in options):
+        raise AnkiError(f"'{voice}' needs two or more plain voices, e.g. 'random:es-MX,edge:es-MX-JorgeNeural'.")
+    return options
+
+
 def validate_voice(voice: str) -> None:
     """Cheap check (no audio generated) so dry runs reject voices that would fail or produce wrong audio."""
+    if voice.startswith("random:"):
+        for option in _random_options(voice):
+            validate_voice(option)
+        return
     engine, _, name = voice.partition(":") if ":" in voice else ("google", "", voice)
     if engine == "google":
         lang = name.partition("-")[0].lower()
@@ -60,6 +80,7 @@ def validate_voice(voice: str) -> None:
 
 def synthesize(text: str, voice: str) -> tuple[str, bytes]:
     """Return (filename, audio bytes) for text spoken by voice. Raises AnkiError with a fix-it message."""
+    voice = resolve_voice(text, voice)
     engine, _, name = voice.partition(":") if ":" in voice else ("google", "", voice)
     with operation(f"tts {engine}", tts_duration, {"tts.engine": engine, "tts.voice": voice}) as span:
         try:
@@ -83,7 +104,7 @@ def synthesize(text: str, voice: str) -> tuple[str, bytes]:
 
 def audio_stem(text: str, voice: str) -> str:
     """Media filename (no extension) for text spoken by voice: the same text and voice always give the same file."""
-    return "anki-mcp-" + hashlib.sha224(f"{voice}|{text}".encode()).hexdigest()
+    return "anki-mcp-" + hashlib.sha224(f"{resolve_voice(text, voice)}|{text}".encode()).hexdigest()
 
 
 def _google(text: str, voice: str) -> bytes:

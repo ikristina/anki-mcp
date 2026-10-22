@@ -170,3 +170,4 @@ What building the suite taught (details and numbers in `docs/evals.md`):
   Male Spanish: `es-MX-JorgeNeural`, `es-ES-AlvaroNeural`, `es-AR-TomasNeural`, `es-CO-GonzaloNeural`, `es-US-AlonsoNeural`.
   Unofficial, so it can break; errors tell the user to retry or add the note without audio. The official route is
   Azure AI Speech (free F0 tier, ~500k chars/month, needs a key) if this ever stops working.
+- `random:a,b` voices are resolved per text by hash (not `random()`), so re-running audio or `replace` checks give the same voice and filename.

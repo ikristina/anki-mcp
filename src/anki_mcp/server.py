@@ -449,7 +449,7 @@ class AudioSpec(_AgentInput):
     voice: str = Field(
         description="Google voice as language[-REGION] ('es-MX', 'fr', 'de', 'pt-BR', 'no'), "
         "or an offline engine: 'espeak:<lang>' (e.g. 'espeak:la' for Latin), 'macos:<Voice>' (e.g. 'macos:Alice') "
-        "or 'piper:<voice>' (a local neural voice, e.g. 'piper:la_LA-vox-medium') or 'edge:<voice>' (Microsoft neural, e.g. 'edge:es-MX-JorgeNeural'). Use the deck profile's voice."
+        "or 'piper:<voice>' (a local neural voice, e.g. 'piper:la_LA-vox-medium') or 'edge:<voice>' (Microsoft neural, e.g. 'edge:es-MX-JorgeNeural'), or 'random:<voice>,<voice>' to pick one per note. Use the deck profile's voice."
     )
     text: str | None = Field(
         default=None,

@@ -89,3 +89,17 @@ def test_edge_audio_is_mp3(monkeypatch):
     name, data = tts.synthesize("hola", "edge:es-MX-JorgeNeural")
     assert name.endswith(".mp3") and data == b"mp3"
 
+
+def test_random_voice_is_stable_per_text_and_uses_both(monkeypatch):
+    voice = "random:es-MX,edge:es-MX-JorgeNeural"
+    picks = {tts.resolve_voice(f"frase {i}", voice) for i in range(30)}
+    assert picks == {"es-MX", "edge:es-MX-JorgeNeural"}
+    assert tts.resolve_voice("hola", voice) == tts.resolve_voice("hola", voice)
+    assert tts.audio_stem("hola", voice) == tts.audio_stem("hola", tts.resolve_voice("hola", voice))
+    tts.validate_voice(voice)
+
+
+def test_random_voice_needs_two_plain_voices():
+    for bad in ("random:es-MX", "random:", "random:es-MX,random:fr,de"):
+        with pytest.raises(AnkiError, match="two or more"):
+            tts.validate_voice(bad)
