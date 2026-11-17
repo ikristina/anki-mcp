@@ -787,6 +787,41 @@ def update_notes(
     return out
 
 
+@mcp.tool(annotations=ToolAnnotations(destructive_hint=True, idempotent_hint=True, open_world_hint=False))
+def delete_notes(
+    note_ids: Annotated[list[int], Field(min_length=1, max_length=50, description="Note ids from search_notes / get_notes.")],
+    dry_run: Annotated[bool, Field(description="Default True: show what would be deleted. Set False to delete.")] = True,
+) -> dict:
+    """Permanently delete notes (with all their cards and review history), e.g. duplicates the user asked to remove.
+
+    Only on the user's explicit request, and only the ids they approved. Dry run by default: list the notes (deck, fields)
+    to the user, then call again with dry_run=False. Refused per note: Yanki notes (the next Yanki sync would recreate
+    them; delete the markdown in the Obsidian vault instead) and unknown ids. Sync afterwards so the phone drops them too.
+    """
+    found = {n["noteId"]: n for n in invoke("notesInfo", notes=note_ids) if n.get("noteId")}
+    decks = _decks_for_notes(list(found.values()))
+    results, apply = [], []
+    for nid in dict.fromkeys(note_ids):
+        n = found.get(nid)
+        if n is None:
+            results.append({"note_id": nid, "status": "error", "error": "Note not found (already deleted?). Get ids from search_notes."})
+        elif n["modelName"].startswith("Yanki"):
+            results.append({"note_id": nid, "status": "error", "error": "Yanki note: delete its markdown in the Obsidian "
+                            "vault instead, or the next Yanki sync recreates it."})
+        else:
+            results.append({"note_id": nid, "status": "would_delete" if dry_run else "deleted", "deck": decks.get(nid, "?"),
+                            "fields": _fields(n, PREVIEW_CHARS)})
+            apply.append(nid)
+    if not dry_run and apply:
+        invoke("deleteNotes", notes=apply)
+        notes_written.add(len(apply), {"operation": "delete"})
+        log.info("deleted %d notes", len(apply))
+    out = {"dry_run": dry_run, "summary": dict(Counter(r["status"] for r in results)), "results": results}
+    if not dry_run and apply:
+        out["note"] = "Deleted for good. Call sync so the other devices drop them too."
+    return out
+
+
 _SYNC_STATUS_RE = re.compile(r"Sync status (\d+) not one of")
 # SyncCollectionResponse.ChangesRequired in Anki's sync.proto; AnkiConnect refuses everything but 0 and 1 (normal sync).
 _FULL_SYNC_REASONS = {

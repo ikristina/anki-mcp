@@ -2,7 +2,7 @@ import pytest
 
 from anki_mcp import server
 from anki_mcp.client import AnkiError
-from anki_mcp.server import (AudioSpec, NoteInput, NoteUpdate, add_audio, add_notes, create_deck, describe_deck, export_deck, get_notes, get_weak_cards, list_decks,
+from anki_mcp.server import (AudioSpec, NoteInput, NoteUpdate, add_audio, add_notes, create_deck, delete_notes, describe_deck, export_deck, get_notes, get_weak_cards, list_decks,
                              list_note_types, search_notes, sync, update_notes)
 
 SPANISH = {"deck": "Languages::Spanish", "note_type": "Spanish"}
@@ -292,6 +292,31 @@ def test_update_notes_refusals(anki):
     assert "not found" in errors[3]
     assert r["results"][4]["status"] == "updated"  # keeping the [sound:] tag is fine
     assert anki.notes[yanki]["fields"]["Back"] == "Pipes."
+
+
+# --- delete_notes ------------------------------------------------------------------------------------------------
+
+def test_delete_notes_dry_run_lists_without_deleting(anki):
+    nid = _note_id(anki, "Languages::Latin", "Socius")
+    r = delete_notes([nid])
+    assert r["dry_run"] and r["summary"] == {"would_delete": 1}
+    assert r["results"][0]["deck"] == "Languages::Latin" and r["results"][0]["fields"]["Front"] == "Socius"
+    assert nid in anki.notes and "deleteNotes" not in anki.calls
+
+
+def test_delete_notes_deletes_only_approved_ids(anki):
+    nid = _note_id(anki, "Languages::Latin", "Socius")
+    other = _note_id(anki, "Languages::Latin", "Puella rosam amat.")
+    r = delete_notes([nid, nid], dry_run=False)  # a repeated id is deleted once
+    assert r["summary"] == {"deleted": 1} and "sync" in r["note"]
+    assert nid not in anki.notes and other in anki.notes
+
+
+def test_delete_notes_refusals(anki):
+    yanki = _note_id(anki, "Go", "Channels?")
+    r = delete_notes([yanki, 999999], dry_run=False)
+    assert "Obsidian" in r["results"][0]["error"] and "not found" in r["results"][1]["error"]
+    assert yanki in anki.notes and "deleteNotes" not in anki.calls
 
 
 # --- sync --------------------------------------------------------------------------------------------------------

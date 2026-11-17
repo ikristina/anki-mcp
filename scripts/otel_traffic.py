@@ -16,7 +16,7 @@ import time
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-WRITES = {"add_notes", "add_audio", "update_notes"}
+WRITES = {"add_notes", "add_audio", "update_notes", "delete_notes"}
 NEVER = {"sync", "set_deck_profile"}
 
 
