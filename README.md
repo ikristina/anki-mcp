@@ -24,7 +24,7 @@ My other Anki project: [anki-new-tab](https://github.com/ikristina/anki-new-tab)
 | `create_deck` | Creates an empty deck (and missing parents) so `add_notes` can use it; reports similar existing names, leaves an existing deck alone, supports `dry_run` |
 | `export_deck` | Writes a deck (with subdecks and media) to an `.apkg` file to share or back up; review history only if asked; never overwrites silently |
 | `sync` | Syncs desktop Anki with AnkiWeb (normal syncs only; refuses a full sync and says why), so notes added on a phone can be tidied and voiced remotely. See [docs/remote-from-phone.md](docs/remote-from-phone.md) |
-| `add_notes` | Batch add with validation, `dry_run`, duplicate check, auto-tag `mcp-added`, optional free TTS audio; refuses Yanki-owned decks |
+| `add_notes` | Batch add with validation, `dry_run`, duplicate check, auto-tag `mcp-added`, optional free TTS audio; refuses Yanki-owned decks. Warns (never blocks) about near-duplicates in any deck: the same word apart from article/case/accents (`cumbre` vs `la cumbre`), plus similar meaning when the [semantic index](#semantic-search-index-optional) is set up |
 
 Skills in `.claude/skills/`:
 - `flashcards` routes cards: technical topics become markdown in the Obsidian vault (synced by Yanki), and everything else goes straight to Anki.
@@ -141,7 +141,8 @@ uv run --extra rag anki-mcp-index      # Anki must be running; first run embeds 
 - Embeddings come from a free local model (`paraphrase-multilingual-MiniLM-L12-v2`, 384 dimensions, handles Spanish, French, Norwegian, Latin and English) and are stored in **Redis 8** (vector search built in). The volume and AOF/RDB settings above keep them across restarts; the index is derived data, so it can always be rebuilt.
 - Later runs re-embed only notes that changed since the last run and drop deleted ones. `--full` rebuilds from scratch, `--limit N` caps one run. Changing the model rebuilds automatically.
 - A card moved to another deck keeps its old deck in the index until the next `--full` run (Anki doesn't bump a note's modified time on a move).
-- To use the tool from an agent, register the server with the extra: `claude mcp add anki --scope user -- uv --directory /absolute/path/to/anki-mcp run --extra rag anki-mcp`. Re-run `anki-mcp-index` now and then (it takes seconds when little changed): notes added since the last run aren't found yet, and `find_similar_notes` reports `indexed_at`.
+- `add_notes` also uses it: each valid note gets a `similar` list when an existing note has the same word (checked with Anki's own search, no index needed) or a similar meaning (similarity ≥ 0.8, from the index). Without the index, `add_notes` still does the same-word check and says `similar_check: semantic check skipped`.
+- To use the tools from an agent, register the server with the extra: `claude mcp add anki --scope user -- uv --directory /absolute/path/to/anki-mcp run --extra rag anki-mcp`. Re-run `anki-mcp-index` now and then (it takes seconds when little changed): notes added since the last run aren't found yet, and `find_similar_notes` reports `indexed_at`.
 - `ANKI_MCP_REDIS_URL` points at a different Redis. If Redis is down, only these commands fail, with a message saying how to start it.
 - How the model was chosen: `uv run --extra rag python scripts/rag_eval.py build` then `score` (recall@5 and MRR on query sets derived from your own collection; results stay in the gitignored `evals/retrieval/`). Plan: [ROADMAP.md](ROADMAP.md), Phase 8.
 

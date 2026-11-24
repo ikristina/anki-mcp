@@ -32,8 +32,12 @@ If the user corrects a convention along the way ("nouns need the article"), offe
 1. Normalize each entry per the profile's `fields` (e.g. fix spelling and accents, articles on nouns, WordType/Gender). If a word is
    ambiguous (several meanings or genders), ask; don't guess.
 2. Call `mcp__anki__add_notes` **once** for the batch with `dry_run: true`. Duplicates show up as errors, so drop
-   them and tell the user which words they already have.
-3. Show the user a compact table of what will be added (one column per filled field).
+   them and tell the user which words they already have. A valid note can also carry `similar`: an existing note with
+   the same word apart from article, case or accents (`same word…`), or close in meaning (`similar meaning (0.8x)`).
+   That is a warning, not an error.
+3. Show the user a compact table of what will be added (one column per filled field), with the `similar` matches next
+   to the notes that have them. A `same word…` match is normally a duplicate: leave the note out unless it has a
+   different meaning, and say so. A `similar meaning` match is only a hint: add the note, and mention the match.
 4. Call `add_notes` again without dry_run, with `audio: {"field": <profile audio.field>, "voice": <profile audio.voice>}`
    on each note. Set `audio.text` to the plain text of the profile's `audio.text_field` when it isn't the first field,
    or when the spoken text should differ (e.g. drop a parenthetical `(fam.)`).

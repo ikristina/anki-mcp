@@ -29,6 +29,7 @@ INDEX = "idx:anki_notes"
 KEY_PREFIX = "anki:note:"
 META_KEY = "anki:index:meta"
 _BUILD_HINT = "Build or refresh the index with `uv run --extra rag anki-mcp-index` (Anki must be running)."
+SIMILAR_THRESHOLD = 0.8  # starting value: a paraphrase-level match on MiniLM; related-but-different notes sit at 0.5-0.75
 TEXT_CHARS = 600  # the model reads ~128 tokens anyway; this bounds what is stored in Redis
 
 _SOUND_RE = re.compile(r"\[sound:[^\]]*\]")
@@ -46,6 +47,47 @@ def note_text(note: dict) -> str:
         if text := _plain(value, None):
             parts.append(text)
     return " | ".join(parts)[:TEXT_CHARS]
+
+
+_LABEL_RE = re.compile(r"\([^)]*\)")
+_ARTICLE_RE = re.compile(r"^(?:el|la|los|las|un|una|le|les|l'|des|du|the|a|an|en|et|ei|ett|der|die|das)\s+", re.IGNORECASE)
+
+
+def core_text(value: str) -> str:
+    """A first field reduced to its word: no HTML, bracketed notes like '(Spain: gambas)', article, case, accents or
+    punctuation. 'la Cumbre', 'cumbre' and 'La cumbre (peak)' all give 'cumbre'."""
+    import unicodedata
+
+    from anki_mcp.server import _plain  # lazy: see note_text
+
+    text = _LABEL_RE.sub(" ", _plain(_SOUND_RE.sub("", value), None)).strip()
+    text = "".join(c for c in unicodedata.normalize("NFD", text.lower()) if unicodedata.category(c) != "Mn")
+    text = re.sub(r"[^\w\s]", " ", text)
+    text = _ARTICLE_RE.sub("", re.sub(r"\s+", " ", text).strip())
+    return text.strip()
+
+
+def lexical_matches(call: Callable[..., Any], first_field: str, limit: int = 3) -> list[dict]:
+    """Existing notes (any deck) whose first field is the same word apart from article, case, accents or a bracketed
+    note. Needs only Anki, so it works without the semantic index. This is what embeddings do worst: 'cumbre' vs
+    'la cumbre' (8.1 eval: keyword recall@5 0.97, MiniLM 0.55)."""
+    core = core_text(first_field)
+    if len(core) < 2:
+        return []
+    ids = call("findNotes", query=f'"nc:{core}"')[:30]  # `nc:` = substring of any field, ignoring case and accents
+    if not ids:
+        return []
+    notes = call("notesInfo", notes=ids)
+    decks = _card_decks(call, [n["cards"][0] for n in notes if n.get("cards")])
+    out = []
+    for n in notes:
+        first = min(n["fields"].values(), key=lambda f: f["order"])["value"]
+        if core_text(first) == core:
+            exact = first.strip() == first_field.strip()
+            out.append({"note_id": n["noteId"], "deck": decks.get(n["cards"][0], "?") if n.get("cards") else "?",
+                        "text": note_text(n)[:120],
+                        "match": "same text" if exact else "same word apart from article, case, accents or a bracketed note"})
+    return out[:limit]
 
 
 class Store(Protocol):

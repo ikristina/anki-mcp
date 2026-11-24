@@ -8,11 +8,12 @@ import fnmatch
 import json
 import re
 import shlex
+import unicodedata
 import zipfile
 
 import pytest
 
-from anki_mcp import server
+from anki_mcp import rag, server
 from anki_mcp.client import AnkiError
 from anki_mcp.tts import audio_stem
 
@@ -84,6 +85,9 @@ class FakeAnki:
         elif term.startswith("tag:"):
             pat = term[4:].lower()
             ok = any(fnmatch.fnmatchcase(t.lower(), pat) or t.lower().startswith(pat + "::") for t in n["tags"])
+        elif term.startswith("nc:"):  # Anki's accent-insensitive plain-text search
+            fold = lambda s: "".join(ch for ch in unicodedata.normalize("NFD", s.lower()) if unicodedata.category(ch) != "Mn")  # noqa: E731
+            ok = any(fold(term[3:]) in fold(v) for v in n["fields"].values())
         elif ":" not in term:  # plain text: case-insensitive substring of any field, '*' as wildcard
             ok = any(fnmatch.fnmatchcase(v.lower(), f"*{term.lower()}*") for v in n["fields"].values())
         elif term == "prop:lapses>0":
@@ -230,6 +234,13 @@ def anki(monkeypatch, tmp_path):
     # Never read or write the user's real ~/.config/anki-mcp/profiles.json.
     monkeypatch.setenv("ANKI_MCP_PROFILES", str(tmp_path / "profiles.json"))
     monkeypatch.setattr(server, "invoke", fake)
+    monkeypatch.setattr(rag, "invoke", fake)
+    # Never reach the real Redis index or load the embedding model from a unit test: tests that need them patch these.
+    def no_index():
+        raise AnkiError("semantic index is not available in unit tests")
+
+    monkeypatch.setattr(rag, "get_store", no_index)
+    monkeypatch.setattr(rag, "get_embedder", no_index)
     # Deterministic, offline audio: no gTTS network calls, no eSpeak/afconvert binaries needed.
     monkeypatch.setattr(server, "synthesize", lambda text, voice: (f"{audio_stem(text, voice)}.mp3", b"ID3fake"))
     return fake

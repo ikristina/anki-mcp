@@ -206,3 +206,81 @@ def test_find_similar_notes_with_an_empty_index_says_how_to_build_it(anki, monke
     monkeypatch.setattr(rag, "get_embedder", lambda: FakeEmbedder())
     with pytest.raises(AnkiError, match="anki-mcp-index"):
         server.find_similar_notes(text="x")
+
+
+# --- 8.4: near-duplicate warnings in add_notes -------------------------------------------------------------------
+
+from anki_mcp.server import NoteInput, add_notes  # noqa: E402
+
+SPANISH = {"deck": "Languages::Spanish", "note_type": "Spanish"}
+
+
+def _add(*words, **kw):
+    notes = [NoteInput(**SPANISH, fields={"Word": w, "Meaning": m}) for w, m in words]
+    return add_notes(notes, dry_run=True, **kw)
+
+
+def test_core_text_ignores_article_case_accents_labels_and_html():
+    for v in ("cumbre", "la cumbre", "La Cumbre", "<b>la cumbre</b> (peak)", "[sound:x.mp3]la cumbre"):
+        assert rag.core_text(v) == "cumbre", v
+    assert rag.core_text("rápido") == rag.core_text("Rapido") == "rapido"
+    assert rag.core_text("el gato (Spain: gato)") == "gato"
+
+
+def test_same_word_without_article_is_flagged_even_without_the_semantic_index(anki):
+    out = _add(("cumbre", "summit"))
+    hit = out["results"][0]
+    assert hit["status"] == "valid"  # a warning, never a block
+    assert hit["similar"][0]["text"].startswith("la cumbre") and "same word" in hit["similar"][0]["match"]
+    assert hit["similar"][0]["deck"] == "Languages::Spanish"
+    assert out["similar_check"].startswith("semantic check skipped")  # the guard in conftest: no index in unit tests
+
+
+def test_accents_and_case_are_ignored(anki):
+    assert "similar" in _add(("RAPIDO", "quick"))["results"][0]
+
+
+def test_unrelated_word_gets_no_warning(anki):
+    assert "similar" not in _add(("zapato", "shoe"))["results"][0]
+
+
+def test_same_text_in_another_deck_says_same_text(anki):
+    other = add_notes([NoteInput(deck="Default", note_type="Basic", fields={"Front": "Socius", "Back": "x"})], dry_run=True)
+    assert other["results"][0]["similar"][0]["match"] == "same text"
+
+
+def test_allow_duplicates_skips_the_check(anki):
+    out = _add(("cumbre", "summit"), allow_duplicates=True)
+    assert "similar" not in out["results"][0] and "similar_check" not in out
+
+
+class MeaningEmbedder(FakeEmbedder):
+    """Notes with the same second text part (the meaning) get the same vector: stands in for 'close in meaning'."""
+
+    def embed(self, texts):
+        out = np.zeros((len(texts), rag.DIM), dtype=np.float32)
+        for i, t in enumerate(texts):
+            out[i, hash(t.split(" | ")[1]) % rag.DIM] = 1.0
+        return out
+
+
+def test_similar_meaning_is_flagged_from_the_semantic_index(anki, monkeypatch):
+    store, emb = MemoryStore(), MeaningEmbedder()
+    run(anki, store, emb)
+    monkeypatch.setattr(rag, "get_store", lambda: store)
+    monkeypatch.setattr(rag, "get_embedder", lambda: emb)
+    notes = [NoteInput(**SPANISH, fields={"Word": "el pico", "Meaning": "peak", "WordType": "N", "Gender": "m"}),
+             NoteInput(**SPANISH, fields={"Word": "zapato", "Meaning": "shoe", "WordType": "N", "Gender": "m"})]
+    out = add_notes(notes, dry_run=True)
+    sim = out["results"][0]["similar"]
+    assert sim[0]["text"].startswith("la cumbre") and sim[0]["match"].startswith("similar meaning (1.00)")
+    assert "similar" not in out["results"][1] and "similar_check" not in out
+
+
+def test_a_broken_index_never_breaks_add_notes(anki, monkeypatch):
+    def boom():
+        raise RuntimeError("Redis is on fire\nstack trace")
+
+    monkeypatch.setattr(rag, "get_store", boom)
+    out = _add(("zapato", "shoe"))
+    assert out["results"][0]["status"] == "valid" and out["similar_check"] == "semantic check skipped: Redis is on fire"

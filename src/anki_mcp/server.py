@@ -544,6 +544,37 @@ def _resolve_note_types(notes: list[NoteInput]) -> dict[int, dict]:
     return notices
 
 
+def _similar_warnings(addable, notes, field_cache) -> tuple[dict[int, list[dict]], str | None]:
+    """Near-duplicates of each note about to be added: the same word apart from article/case/accents (needs only
+    Anki), plus notes close in meaning from the semantic index when it's set up. Warns, never blocks.
+
+    Returns ({note index: matches}, why the semantic part was skipped or None).
+    """
+    from anki_mcp import rag  # optional dependencies stay out of every other tool's way
+
+    found: dict[int, list[dict]] = {}
+    for i, _ in addable:
+        first = notes[i].fields.get(field_cache[notes[i].note_type][0], "")
+        if hits := rag.lexical_matches(invoke, first):
+            found[i] = hits
+    skipped = None
+    try:
+        for i, _ in addable:
+            fields = {name: {"order": k, "value": notes[i].fields.get(name, "")} for k, name in enumerate(field_cache[notes[i].note_type])}
+            text = rag.note_text({"fields": fields})
+            if not text:
+                continue
+            seen = {h["note_id"] for h in found.get(i, [])}
+            for h in rag.find_similar(text, k=3)["results"]:
+                if h["similarity"] >= rag.SIMILAR_THRESHOLD and h["note_id"] not in seen:
+                    found.setdefault(i, []).append({"note_id": h["note_id"], "deck": h["deck"], "text": _plain(h["text"], PREVIEW_CHARS),
+                                                    "match": f"similar meaning ({h['similarity']:.2f})"})
+    except Exception as e:  # Redis down, model missing, no index: the lexical check above still ran
+        skipped = f"semantic check skipped: {str(e).splitlines()[0][:150]}" if str(e) else "semantic check skipped"
+        log.info("add_notes: %s", skipped)
+    return {i: hits[:3] for i, hits in found.items()}, skipped
+
+
 @mcp.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=False, open_world_hint=True))
 def add_notes(
     notes: Annotated[list[NoteInput], Field(min_length=1, max_length=50)],
@@ -560,6 +591,10 @@ def add_notes(
     Unknown keys in a note or its audio (e.g. 'text_field', 'notetype') are rejected, not ignored.
     An omitted note_type comes from the deck profile (else 'Basic'); one that differs from the profile's gets a warning.
     Omitted tags come from the deck profile too.
+    A note that Anki accepts can still carry `similar`: existing notes (any deck) with the same word apart from
+    article, case or accents ('cumbre' vs 'la cumbre') or a similar meaning, per the semantic index when it is set up
+    (`similar_check` says if that part was skipped). Warnings only, never a block: show them to the user, who
+    decides. `allow_duplicates=True` skips this check.
     """
     decks = set(invoke("deckNames"))
     yanki = _yanki_counts()
@@ -567,6 +602,8 @@ def add_notes(
     field_cache: dict[str, list[str]] = {}
     results: list[dict] = [{} for _ in notes]
     candidates: list[tuple[int, dict]] = []
+    similar: dict[int, list[dict]] = {}
+    similar_skipped: str | None = None
     notices = _resolve_note_types(notes)
 
     for i, note in enumerate(notes):
@@ -630,6 +667,7 @@ def add_notes(
             else:
                 results[i] = {"index": i, "status": "error", "error": check.get("error", "cannot add")}
 
+        similar, similar_skipped = ({}, None) if allow_duplicates or not addable else _similar_warnings(addable, notes, field_cache)
         if dry_run:
             for i, _ in addable:
                 results[i] = {"index": i, "status": "valid"}
@@ -640,12 +678,17 @@ def add_notes(
 
     for i, extra in notices.items():
         results[i].update(extra)
+    for i, hits in similar.items():
+        results[i]["similar"] = hits
     summary = {s: sum(r["status"] == s for r in results) for s in ("added", "valid", "error")}
     if added := Counter(notes[i].deck for i, r in enumerate(results) if r["status"] == "added"):
         for deck, n in added.items():
             notes_written.add(n, {"operation": "add", "anki.deck": deck})
         log.info("added %d notes: %s", summary["added"], dict(added))
-    return {"dry_run": dry_run, "summary": summary, "results": results}
+    out = {"dry_run": dry_run, "summary": summary, "results": results}
+    if similar_skipped:
+        out["similar_check"] = similar_skipped
+    return out
 
 
 @mcp.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=True, open_world_hint=True))
