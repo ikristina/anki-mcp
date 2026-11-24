@@ -554,10 +554,12 @@ def _similar_warnings(addable, notes, field_cache) -> tuple[dict[int, list[dict]
     """
     from anki_mcp import rag  # optional dependencies stay out of every other tool's way
 
+    saved = profiles.load()
+    scope = {i: notes[i].deck if (p := saved.get(notes[i].deck)) and p.similar_scope == "deck" else None for i, _ in addable}
     found: dict[int, list[dict]] = {}
     for i, _ in addable:
         first = notes[i].fields.get(field_cache[notes[i].note_type][0], "")
-        if hits := rag.lexical_matches(invoke, first):
+        if hits := rag.lexical_matches(invoke, first, deck=scope[i]):
             found[i] = hits
     skipped = None
     try:
@@ -567,7 +569,7 @@ def _similar_warnings(addable, notes, field_cache) -> tuple[dict[int, list[dict]
             if not text:
                 continue
             seen = {h["note_id"] for h in found.get(i, [])}
-            for h in rag.find_similar(text, k=3)["results"]:
+            for h in rag.find_similar(text, k=3, deck=scope[i])["results"]:
                 if h["similarity"] >= rag.SIMILAR_THRESHOLD and h["note_id"] not in seen:
                     found.setdefault(i, []).append({"note_id": h["note_id"], "deck": h["deck"], "text": _plain(h["text"], PREVIEW_CHARS),
                                                     "match": f"similar meaning ({h['similarity']:.2f})"})
@@ -593,7 +595,8 @@ def add_notes(
     Unknown keys in a note or its audio (e.g. 'text_field', 'notetype') are rejected, not ignored.
     An omitted note_type comes from the deck profile (else 'Basic'); one that differs from the profile's gets a warning.
     Omitted tags come from the deck profile too.
-    A note that Anki accepts can still carry `similar`: existing notes (any deck) with the same word apart from
+    A note that Anki accepts can still carry `similar`: existing notes (any deck, or only the target deck when its
+    profile has similar_scope='deck') with the same word apart from
     article, case or accents ('cumbre' vs 'la cumbre') or a similar meaning, per the semantic index when it is set up
     (`similar_check` says if that part was skipped). Warnings only, never a block: show them to the user, who
     decides. `allow_duplicates=True` skips this check.

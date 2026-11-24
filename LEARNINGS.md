@@ -234,3 +234,6 @@ What building the suite taught (details and numbers in `docs/evals.md`):
 - AnkiConnect `updateModelTemplates` + `updateModelStyling` change the look and card layout of an existing note type. Checked `col.scm` (schema-modified time) before and after: unchanged, so no full sync. Read the collection with its `-wal` file copied too, otherwise a copy looks stale.
 - Styling belongs to the note type, shared by every deck using it. "Basic (and reversed card)" is used by Pimsleur 1 and 2, SpanishRandom and Latin; restyling it changed all four. Old templates and CSS were saved to `~/.config/anki-mcp/backups/basic-reversed-style-*.json`.
 - Script used: `examples/note_types/basic-reversed-index-style.py` (Index look: white card, one red dot, light type; dark mode via `.nightMode`). Not yet a server tool.
+
+## Duplicate check scope (2026-11-23)
+`add_notes` warned about near-duplicates across the whole collection, which is noise for a catch-all deck like SpanishRandom. Deck profiles now have `similar_scope` (`all` default, `deck` = only that deck and subdecks). It filters both the lexical (`"deck:X" "nc:word"`) and the semantic (`find_similar(deck=...)`) check.

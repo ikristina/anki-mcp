@@ -67,14 +67,15 @@ def core_text(value: str) -> str:
     return text.strip()
 
 
-def lexical_matches(call: Callable[..., Any], first_field: str, limit: int = 3) -> list[dict]:
+def lexical_matches(call: Callable[..., Any], first_field: str, limit: int = 3, deck: str | None = None) -> list[dict]:
     """Existing notes (any deck) whose first field is the same word apart from article, case, accents or a bracketed
     note. Needs only Anki, so it works without the semantic index. This is what embeddings do worst: 'cumbre' vs
-    'la cumbre' (8.1 eval: keyword recall@5 0.97, MiniLM 0.55)."""
+    'la cumbre' (8.1 eval: keyword recall@5 0.97, MiniLM 0.55). `deck` limits it to that deck and its subdecks."""
     core = core_text(first_field)
     if len(core) < 2:
         return []
-    ids = call("findNotes", query=f'"nc:{core}"')[:30]  # `nc:` = substring of any field, ignoring case and accents
+    query = f'"deck:{deck}" "nc:{core}"' if deck else f'"nc:{core}"'
+    ids = call("findNotes", query=query)[:30]  # `nc:` = substring of any field, ignoring case and accents
     if not ids:
         return []
     notes = call("notesInfo", notes=ids)

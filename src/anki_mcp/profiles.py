@@ -7,6 +7,7 @@ Stored as one human-editable JSON file, outside the collection, so saving a prof
 import json
 import os
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -28,6 +29,10 @@ class DeckProfile(BaseModel):
         "'WordType': 'one of N, V, Adj, Adv, Expr'}.",
     )
     tags: list[str] = Field(default_factory=list, description="Tags to put on new notes, e.g. ['latin'].")
+    similar_scope: Literal["all", "deck"] = Field(
+        default="all",
+        description="Where add_notes looks for near-duplicates: 'all' (whole collection, default) or 'deck' (only this deck and its subdecks).",
+    )
     conventions: list[str] = Field(
         default_factory=list, description="Free-form rules, e.g. 'Tag duolingo if the sentence comes from Duolingo.'"
     )

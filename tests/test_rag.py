@@ -302,3 +302,13 @@ def test_move_cards_updates_the_index_deck_filter(anki, indexed):
 def test_move_cards_still_moves_when_the_index_is_down(anki):
     out = server.move_cards('"deck:Languages::Spanish" perro', "Default", dry_run=False)  # conftest's guard makes get_store raise
     assert out["moved"] == 1 and "index_updated" not in out
+
+
+def test_similar_scope_deck_ignores_other_decks(anki, tmp_path, monkeypatch):
+    from anki_mcp import profiles
+
+    monkeypatch.setenv("ANKI_MCP_PROFILES", str(tmp_path / "p.json"))
+    other = lambda: add_notes([NoteInput(deck="Default", note_type="Basic", fields={"Front": "Socius", "Back": "x"})], dry_run=True)
+    assert "similar" in other()["results"][0]  # default scope 'all' sees the same word in another deck
+    profiles.save({"Default": profiles.DeckProfile(similar_scope="deck")})
+    assert "similar" not in other()["results"][0]

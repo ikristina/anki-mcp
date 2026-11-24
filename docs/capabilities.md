@@ -2,7 +2,7 @@
 
 A plain-language map of what this server lets an agent do with your Anki collection, what it can't do yet, and what the design vocabulary means. **Whoever adds a capability updates this file in the same change.** Tool details are in the README table; this page is for "what's possible?".
 
-Last updated: 2026-11-23 (English Vocab note type created, English deck converted).
+Last updated: 2026-11-23 (deck profile option `similar_scope`).
 
 ## Things you can say
 
@@ -22,7 +22,7 @@ Last updated: 2026-11-23 (English Vocab note type created, English deck converte
 | "Delete these notes" | Only for ids you approved, dry run first | `delete_notes` |
 | "Sync" | Normal sync with AnkiWeb (never a full one) | `sync` |
 | "What does deck X look like?" | Note types, fields, audio, tag patterns, samples | `describe_deck`, `list_note_types` |
-| "Remember how this deck works" | Saves conventions (voice, field rules, tags) for next time | `set_deck_profile` |
+| "Remember how this deck works" | Saves conventions (voice, field rules, tags, and whether duplicate checks look at the whole collection or only that deck: `similar_scope`) for next time | `set_deck_profile` |
 
 Safety defaults: writes are dry runs first, everything added is tagged `mcp-added` (edited: `mcp-edited`, converted: `mcp-converted`), decks synced from Obsidian (Yanki) are never written to.
 
