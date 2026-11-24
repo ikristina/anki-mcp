@@ -55,6 +55,12 @@ class MemoryStore:
     def finish(self, model, dim):
         self.meta = {"model": model, "dim": dim}
 
+    def set_decks(self, note_decks):
+        hit = [i for i in note_decks if i in self.items]
+        for i in hit:
+            self.items[i]["deck"] = note_decks[i]
+        return len(hit)
+
     def info(self):
         return {"notes": len(self.items), "model": self.meta.get("model"), "indexed_at": 1_700_000_000 if self.meta else None}
 
@@ -284,3 +290,15 @@ def test_a_broken_index_never_breaks_add_notes(anki, monkeypatch):
     monkeypatch.setattr(rag, "get_store", boom)
     out = _add(("zapato", "shoe"))
     assert out["results"][0]["status"] == "valid" and out["similar_check"] == "semantic check skipped: Redis is on fire"
+
+
+def test_move_cards_updates_the_index_deck_filter(anki, indexed):
+    nid = next(i for i, n in anki.notes.items() if n["fields"].get("Word") == "el perro")
+    assert indexed.items[nid]["deck"] == "Languages::Spanish"
+    out = server.move_cards('"deck:Languages::Spanish" perro', "Default", dry_run=False)
+    assert out["moved"] == 1 and out["index_updated"] == 1 and indexed.items[nid]["deck"] == "Default"
+
+
+def test_move_cards_still_moves_when_the_index_is_down(anki):
+    out = server.move_cards('"deck:Languages::Spanish" perro', "Default", dry_run=False)  # conftest's guard makes get_store raise
+    assert out["moved"] == 1 and "index_updated" not in out

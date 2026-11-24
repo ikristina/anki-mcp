@@ -9,10 +9,12 @@ Design rules (see LEARNINGS.md):
 import base64
 import difflib
 import html
+import json
 import os
 import re
 import zipfile
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -907,6 +909,239 @@ _FULL_SYNC_REASONS = {
     3: "this computer's collection is empty, so it would download everything from AnkiWeb",
     4: "AnkiWeb is empty, so this computer would upload everything",
 }
+
+
+MAX_MOVE = 200
+
+
+@mcp.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=True, open_world_hint=False))
+def move_cards(
+    query: Annotated[str, Field(description="Anki search for the cards to move, e.g. '\"deck:Default\" tag:Spanish::Random'.")],
+    target_deck: Annotated[str, Field(description="Exact name of an existing deck (see list_decks; create_deck makes one).")],
+    dry_run: Annotated[bool, Field(description="Default True: show what would move. Set False to move.")] = True,
+) -> dict:
+    """Move the cards that match a search into another deck. Review history and scheduling are kept, and a normal sync
+    carries the move to the other devices.
+
+    Dry run by default: it reports how many cards match, which decks they are in now (`from`, so the move can be
+    undone), and a sample; show that to the user, then call again with dry_run=False. At most 200 cards per call.
+    Moves cards, not notes: if the search matches only some cards of a note, the rest stay where they are
+    (`notes_left_partly_behind` counts those). Cards in Yanki decks are skipped (Obsidian owns them), and a Yanki deck
+    can't be a target. Cards already in the target are left alone.
+    """
+    if not query.strip():
+        raise AnkiError("Give an Anki search query (e.g. '\"deck:Default\" tag:foo'); an empty one would match every card.")
+    decks = set(invoke("deckNames"))
+    if target_deck not in decks:
+        near = _similar_decks(target_deck, decks)
+        raise AnkiError(f"Deck '{target_deck}' does not exist. Similar: {near or 'none'}. Use list_decks, or create_deck first.")
+    if _source(target_deck, _own_card_counts(_with_subdecks({target_deck}, decks)), _yanki_counts()) == "yanki":
+        raise AnkiError(f"Deck '{target_deck}' is synced from the user's Obsidian vault by Yanki; moved cards would live "
+                        "outside their notes. Pick a deck with source='anki'.")
+    card_ids = invoke("findCards", query=query)
+    if not card_ids:
+        raise AnkiError(f"No cards match {query!r}. Check the query with search_notes first.")
+    if len(card_ids) > MAX_MOVE:
+        raise AnkiError(f"{len(card_ids)} cards match; the limit is {MAX_MOVE} per call. Narrow the query (add a deck or tag).")
+    cards = invoke("cardsInfo", cards=card_ids)
+    yanki = [c for c in cards if c.get("modelName", "").startswith("Yanki")]
+    stay = [c for c in cards if c["deckName"] == target_deck and c not in yanki]
+    move = [c for c in cards if c not in yanki and c not in stay]
+    moving = {c["cardId"] for c in move}
+    note_info = {n["noteId"]: n for n in invoke("notesInfo", notes=sorted({c["note"] for c in move})) if n.get("noteId")}
+    behind = sum(1 for n in note_info.values() if any(cid not in moving for cid in n["cards"]))
+    out: dict = {
+        "dry_run": dry_run,
+        "target_deck": target_deck,
+        "matched": len(cards),
+        ("would_move" if dry_run else "moved"): len(move),
+        "already_in_target": len(stay),
+        "skipped_yanki": len(yanki),
+        "from": dict(Counter(c["deckName"] for c in move)),
+        "notes_left_partly_behind": behind,
+        "sample": [
+            {"note_id": c["note"], "deck": c["deckName"],
+             "fields": dict(list({k: _plain(f["value"], PREVIEW_CHARS) for k, f in sorted(c["fields"].items(), key=lambda kv: kv[1]["order"])
+                                  if "[sound:" not in f["value"]}.items())[:3])}
+            for c in {c["note"]: c for c in reversed(move)}.values()][:5],
+    }
+    if not dry_run and move:
+        invoke("changeDeck", cards=sorted(moving), deck=target_deck)
+        notes_written.add(len(move), {"operation": "move", "anki.deck": target_deck})
+        log.info("moved %d cards to %s from %s", len(move), target_deck, out["from"])
+        out["note"] = "Moved. Sync so the other devices get it. To undo, move them back using the `from` decks."
+        # Keep the semantic index's deck filter right. Anki doesn't bump the note's modified time on a move, so the
+        # incremental indexer would never notice. Best effort: the index is optional and may be down.
+        first_card_moved = {nid: target_deck for nid, n in note_info.items() if n["cards"] and n["cards"][0] in moving}
+        if first_card_moved:
+            try:
+                from anki_mcp import rag
+
+                out["index_updated"] = rag.update_decks(first_card_moved)
+            except Exception as e:
+                log.info("move_cards: semantic index not updated (%s)", str(e).splitlines()[0][:100] if str(e) else "unavailable")
+    return out
+
+
+CONVERT_TRIAL = 20  # more notes than this need an earlier successful conversion of the same type pair
+MAX_CONVERT = 200
+CONVERTED_TAG = "mcp-converted"
+
+
+def _history_file() -> Path:
+    return Path(os.environ.get("ANKI_MCP_HISTORY") or Path.home() / ".config" / "anki-mcp" / "convert_history.jsonl").expanduser()
+
+
+def _backup_root() -> Path:
+    return Path(os.environ.get("ANKI_MCP_BACKUP_DIR") or Path.home() / ".config" / "anki-mcp" / "backups").expanduser()
+
+
+def _converted_before(source: str, target: str) -> int:
+    """Notes already converted source -> target by this server (from the history file), so a big run needs a trial first."""
+    try:
+        lines = _history_file().read_text().splitlines()
+    except OSError:
+        return 0
+    total = 0
+    for line in lines:
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if rec.get("source") == source and rec.get("target") == target:
+            total += len(rec.get("converted", []))
+    return total
+
+
+_FULL_SYNC_STEPS = (
+    "Changing a note type is a schema change: Anki will require a one-way full sync. Now, on the desktop: Sync, and when "
+    "Anki asks which side to keep choose 'Upload to AnkiWeb'. Then sync the phone (it downloads the collection once). "
+    "Do not sync the phone before the desktop. This server's `sync` tool refuses full syncs on purpose, so this step is manual."
+)
+
+
+@mcp.tool(annotations=ToolAnnotations(destructive_hint=True, idempotent_hint=False, open_world_hint=False))
+def convert_notes(
+    query: Annotated[str, Field(description="Anki search for the notes to convert; they must all share one note type.")],
+    target_note_type: Annotated[str, Field(description="Existing note type to convert them to (list_note_types).")],
+    field_map: Annotated[dict[str, str], Field(description="{target field: source field}. Target fields left out stay empty. E.g. {'Word': 'Front', 'Meaning': 'Back'}.")],
+    dry_run: Annotated[bool, Field(description="Default True: plan only, nothing changes. Set False to convert.")] = True,
+    limit: Annotated[int | None, Field(ge=1, le=MAX_CONVERT, description="Convert at most this many notes (a trial batch, e.g. 5).")] = None,
+    drop_fields: Annotated[list[str], Field(description="Source fields that are not mapped and whose content the user agreed to lose.")] = [],
+    confirm_all_devices_synced: Annotated[bool, Field(description="Only True once the user confirmed that every device (phone too) is fully synced.")] = False,
+) -> dict:
+    """Change the note type of existing notes, keeping their cards and review history (e.g. Basic -> a vocabulary type).
+
+    HIGH RISK. Anki treats this as a schema change, so afterwards the user must do a one-way full sync from the desktop
+    ('Upload to AnkiWeb'), and anything reviewed on another device since its last sync is lost. The protocol:
+    1. Dry run (default): shows the plan, fields that would lose data (`would_lose`), the decks that will be backed up and
+       a before/after sample. Show it to the user and get their agreement on the mapping.
+    2. Convert a small trial first (`limit=5`). More than 20 notes are refused until that note type pair has been
+       converted once. Have the user look at the result in Anki.
+    3. Ask the user to sync every device, then pass confirm_all_devices_synced=True. The tool first exports every affected
+       deck (with scheduling) to the backup folder and refuses to continue if that fails, then converts one note at a
+       time and stops at the first error. Everything is logged to a history file.
+    4. Follow the `next` steps in the result (the full sync is manual).
+    Fields are copied as they are (cloze markup `{{c1::…}}` stays in the text). Tags are kept and 'mcp-converted' is added.
+    Yanki notes are refused. Unmapped source fields with content must be named
+    in drop_fields. Needs card templates whose names match (or a source with a single template); otherwise convert in
+    Anki's own Change Note Type dialog.
+    """
+    note_ids = invoke("findNotes", query=query)
+    if not note_ids:
+        raise AnkiError(f"No notes match {query!r}. Check the query with search_notes first.")
+    if len(note_ids) > MAX_CONVERT and not limit:
+        raise AnkiError(f"{len(note_ids)} notes match; the limit is {MAX_CONVERT} per call. Narrow the query or pass limit.")
+    notes = invoke("notesInfo", notes=note_ids[: limit or MAX_CONVERT])
+    types = Counter(n["modelName"] for n in notes)
+    if len(types) > 1:
+        raise AnkiError(f"The query matches notes of several note types {dict(types)}. Add note:\"<type>\" to convert one type at a time.")
+    source = next(iter(types))
+    if source.startswith("Yanki"):
+        raise AnkiError("These are Yanki notes, generated from the Obsidian vault; converting them would be overwritten by the next Yanki sync.")
+    if source == target_note_type:
+        raise AnkiError(f"The notes already have note type '{target_note_type}'.")
+    try:
+        target_fields = invoke("modelFieldNames", modelName=target_note_type)
+    except AnkiError:
+        raise AnkiError(f"Note type '{target_note_type}' does not exist. Use list_note_types (or create it in Anki first).") from None
+    source_fields = list(notes[0]["fields"])
+    bad_keys = sorted(set(field_map) - set(target_fields))
+    bad_vals = sorted(set(field_map.values()) - set(source_fields))
+    if bad_keys or bad_vals:
+        raise AnkiError(f"field_map is {{target field: source field}}. Unknown target fields {bad_keys} (valid: {target_fields}); "
+                        f"unknown source fields {bad_vals} (valid: {source_fields}).")
+    src_t, tgt_t = list(invoke("modelTemplates", modelName=source)), list(invoke("modelTemplates", modelName=target_note_type))
+    if len(src_t) > 1 and not {t.lower() for t in tgt_t} <= {t.lower() for t in src_t}:
+        raise AnkiError(f"Card templates don't line up: '{source}' has {src_t}, '{target_note_type}' has {tgt_t}. Anki can only carry "
+                        "the cards over when the names match (or the source has one template). Rename a template in Anki "
+                        "(Tools > Manage Note Types > Cards), or convert these notes with Anki's Change Note Type dialog.")
+    mapped = set(field_map.values())
+    would_lose = {f: c for f in source_fields if f not in mapped
+                  if (c := sum(1 for n in notes if _plain(n["fields"][f]["value"], None)))}
+    plan = []
+    for n in notes:
+        values = {t: n["fields"][field_map[t]]["value"] if t in field_map else "" for t in target_fields}
+        plan.append((n, values, sorted(set(n["tags"]) | {CONVERTED_TAG})))
+    decks = sorted({d for d in invoke("getDecks", cards=[c for n in notes for c in n["cards"]])})
+    earlier = _converted_before(source, target_note_type)
+    needs_trial = len(notes) > CONVERT_TRIAL and not earlier
+    out: dict = {
+        "dry_run": dry_run,
+        "source_note_type": source,
+        "target_note_type": target_note_type,
+        "notes": len(notes),
+        "mapping": {t: field_map.get(t) for t in target_fields},
+        "would_lose": would_lose,
+        "decks_to_back_up": decks,
+        "needs_trial_first": needs_trial,
+        "sample": [{"note_id": n["noteId"], "before": {k: _plain(f["value"], 60) for k, f in n["fields"].items()},
+                    "after": {k: _plain(v, 60) for k, v in values.items()}} for n, values, _ in plan[:3]],
+    }
+    if dry_run:
+        out["next"] = ("Show the user this plan. Then convert a trial with limit=5 and dry_run=False, confirm_all_devices_synced=True "
+                       "(after they have synced every device).")
+        return out
+    if needs_trial:
+        raise AnkiError(f"{len(notes)} notes is more than the {CONVERT_TRIAL}-note trial limit and no '{source}' -> '{target_note_type}' "
+                        "conversion has been done yet. Convert a few first (limit=5), have the user check them in Anki, then run the rest.")
+    if lost := sorted(set(would_lose) - set(drop_fields)):
+        raise AnkiError(f"Source fields {lost} are not mapped and have content that would be lost. Map them in field_map, or list "
+                        "them in drop_fields if the user agreed to lose them.")
+    if not confirm_all_devices_synced:
+        raise AnkiError("Refusing to convert until the user confirms every device is fully synced: this change forces a one-way full "
+                        "sync, and unsynced reviews from the phone would be lost. Ask them to sync the phone and the desktop, wait "
+                        "for it to finish, then call again with confirm_all_devices_synced=True.")
+    base = datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp, folder = base, _backup_root() / base
+    for n_try in range(2, 100):  # two runs in the same second must not share (or overwrite) a backup
+        if not folder.exists():
+            break
+        stamp = f"{base}-{n_try}"
+        folder = _backup_root() / stamp
+    folder.mkdir(parents=True)
+    backups = [export_deck(deck=d, path=str(folder / (re.sub(r"[^\w.-]+", "_", d) + ".apkg")), include_scheduling=True)["path"] for d in decks]
+    converted: list[int] = []
+    failed: list[dict] = []
+    for n, values, tags in plan:
+        try:
+            invoke("updateNoteModel", note={"id": n["noteId"], "modelName": target_note_type, "fields": values, "tags": tags})
+            converted.append(n["noteId"])
+        except AnkiError as e:
+            failed.append({"note_id": n["noteId"], "error": str(e)})
+            break  # a failure usually repeats for the rest; stop with what is done
+    history = _history_file()
+    history.parent.mkdir(parents=True, exist_ok=True)
+    with history.open("a") as fh:
+        fh.write(json.dumps({"time": stamp, "source": source, "target": target_note_type, "field_map": field_map,
+                             "converted": converted, "failed": failed, "backups": backups}) + "\n")
+    notes_written.add(len(converted), {"operation": "convert"})
+    log.info("converted %d notes %s -> %s (%d failed)", len(converted), source, target_note_type, len(failed))
+    out.update({"converted": len(converted), "failed": failed, "backups": backups, "history": str(history)})
+    out["next"] = _FULL_SYNC_STEPS if converted else "Nothing was converted."
+    if failed:
+        out["next"] = f"Stopped at the first error ({failed[0]['error']}). {len(converted)} notes were converted. " + out["next"]
+    return out
 
 
 @mcp.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=True, open_world_hint=True))

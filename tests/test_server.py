@@ -461,3 +461,159 @@ def test_export_deck_checks_deck_and_path_before_exporting(anki, deck, path, err
     with pytest.raises(AnkiError, match=error):
         export_deck(deck, path=path)
     assert "exportPackage" not in anki.calls
+
+
+# --- move_cards ----------------------------------------------------------------------------------------------------
+
+def _deck_of(anki, word):
+    return next(n["deck"] for n in anki.notes.values() if n["fields"].get("Word") == word)
+
+
+def test_move_cards_is_a_dry_run_by_default(anki):
+    out = server.move_cards('"deck:Languages::Spanish" cumbre', "Default")
+    assert out["dry_run"] is True and out["would_move"] == 1 and "moved" not in out
+    assert out["from"] == {"Languages::Spanish": 1} and out["sample"][0]["fields"]["Word"] == "la cumbre" and "Audio" not in out["sample"][0]["fields"]
+    assert _deck_of(anki, "la cumbre") == "Languages::Spanish" and "changeDeck" not in anki.calls
+
+
+def test_move_cards_moves_keeps_the_note_mod_time_and_says_how_to_undo(anki):
+    nid = next(i for i, n in anki.notes.items() if n["fields"].get("Word") == "el perro")
+    mod = anki.notes[nid]["mod"]
+    out = server.move_cards('"deck:Languages::Spanish" note:Spanish', "Default", dry_run=False)
+    assert out["moved"] == 6 and out["from"] == {"Languages::Spanish": 6} and "from" in out["note"]
+    assert _deck_of(anki, "el perro") == "Default" and anki.notes[nid]["mod"] == mod
+
+
+def test_move_cards_leaves_cards_already_in_the_target_alone(anki):
+    out = server.move_cards('"deck:Languages::Latin"', "Languages::Latin", dry_run=False)
+    assert out["moved"] == 0 and out["already_in_target"] == 3 and "changeDeck" not in anki.calls
+
+
+def test_move_cards_skips_yanki_cards_and_refuses_a_yanki_target(anki):
+    out = server.move_cards('"deck:Go"', "Default", dry_run=False)
+    assert out["moved"] == 0 and out["skipped_yanki"] == 1
+    assert next(n for n in anki.notes.values() if n["fields"].get("Front") == "Channels?")["deck"] == "Go"
+    with pytest.raises(AnkiError, match="Yanki"):
+        server.move_cards("deck:Default", "Go")
+
+
+def test_move_cards_errors_say_what_to_do(anki):
+    with pytest.raises(AnkiError, match="Similar: .*'Languages::Spanish'"):
+        server.move_cards("deck:Default", "Languages::Spansh")
+    with pytest.raises(AnkiError, match="No cards match"):
+        server.move_cards("zzzznothing", "Default")
+    with pytest.raises(AnkiError, match="empty one would match every card"):
+        server.move_cards("  ", "Default")
+    for i in range(201):
+        anki.add("Default", "Basic", {"Front": f"bulk {i}", "Back": "x"})
+    with pytest.raises(AnkiError, match="limit is 200"):
+        server.move_cards('"deck:Default"', "Languages")
+
+
+def test_move_cards_counts_notes_whose_other_cards_stay_behind(anki):
+    real = anki.a_notesInfo
+    anki.a_notesInfo = lambda notes: [{**n, "cards": n["cards"] + [n["cards"][0] + 1]} for n in real(notes)]
+    out = server.move_cards('"deck:Languages::Spanish" cumbre', "Default")
+    assert out["notes_left_partly_behind"] == 1
+
+
+# --- convert_notes -------------------------------------------------------------------------------------------------
+
+import json as _json  # noqa: E402
+
+BASIC_TO_SPANISH = {"Word": "Front", "Meaning": "Back"}
+
+
+def _basics(anki, n, deck="Default", tags=("t1",)):
+    return [anki.add(deck, "Basic", {"Front": f"palabra {i}", "Back": f"word {i}"}, tags=tags) for i in range(n)]
+
+
+def test_convert_dry_run_plans_and_changes_nothing(anki, tmp_path):
+    ids = _basics(anki, 3)
+    out = server.convert_notes('"deck:Default"', "Spanish", BASIC_TO_SPANISH)
+    assert out["dry_run"] and out["notes"] == 3 and out["source_note_type"] == "Basic" and out["would_lose"] == {}
+    assert out["mapping"] == {"Word": "Front", "Meaning": "Back", "WordType": None, "Gender": None, "Audio": None}
+    assert out["decks_to_back_up"] == ["Default"] and out["needs_trial_first"] is False
+    assert out["sample"][0]["before"] == {"Front": "palabra 0", "Back": "word 0"} and out["sample"][0]["after"]["Word"] == "palabra 0"
+    assert all(anki.notes[i]["model"] == "Basic" for i in ids) and "updateNoteModel" not in anki.calls
+    assert not (tmp_path / "backups").exists()
+
+
+def test_convert_refuses_without_confirmation_of_synced_devices(anki):
+    _basics(anki, 2)
+    with pytest.raises(AnkiError, match="every device is fully synced"):
+        server.convert_notes('"deck:Default"', "Spanish", BASIC_TO_SPANISH, dry_run=False)
+    assert "updateNoteModel" not in anki.calls
+
+
+def test_convert_backs_up_converts_keeps_tags_and_logs(anki, tmp_path):
+    ids = _basics(anki, 2, tags=("keep-me",))
+    out = server.convert_notes('"deck:Default"', "Spanish", BASIC_TO_SPANISH, dry_run=False, confirm_all_devices_synced=True)
+    assert out["converted"] == 2 and out["failed"] == []
+    n = anki.notes[ids[0]]
+    assert n["model"] == "Spanish" and n["fields"]["Word"] == "palabra 0" and n["fields"]["Meaning"] == "word 0" and n["fields"]["Gender"] == ""
+    assert sorted(n["tags"]) == ["keep-me", "mcp-converted"]
+    assert len(out["backups"]) == 1 and out["backups"][0].endswith("Default.apkg") and anki.exported["includeSched"] is True
+    assert (tmp_path / "backups").is_dir() and "Upload to AnkiWeb" in out["next"]
+    rec = _json.loads((tmp_path / "convert_history.jsonl").read_text())
+    assert rec["converted"] == ids and rec["source"] == "Basic" and rec["target"] == "Spanish" and rec["backups"] == out["backups"]
+
+
+def test_convert_unmapped_content_needs_drop_fields(anki):
+    _basics(anki, 2)
+    kw = dict(dry_run=False, confirm_all_devices_synced=True)
+    assert server.convert_notes('"deck:Default"', "Spanish", {"Word": "Front"})["would_lose"] == {"Back": 2}
+    with pytest.raises(AnkiError, match=r"\['Back'\].*drop_fields"):
+        server.convert_notes('"deck:Default"', "Spanish", {"Word": "Front"}, **kw)
+    assert server.convert_notes('"deck:Default"', "Spanish", {"Word": "Front"}, drop_fields=["Back"], **kw)["converted"] == 2
+
+
+def test_convert_big_batches_need_a_trial_first(anki):
+    ids = _basics(anki, 25)
+    kw = dict(dry_run=False, confirm_all_devices_synced=True)
+    assert server.convert_notes('"deck:Default"', "Spanish", BASIC_TO_SPANISH)["needs_trial_first"] is True
+    with pytest.raises(AnkiError, match="trial"):
+        server.convert_notes('"deck:Default"', "Spanish", BASIC_TO_SPANISH, **kw)
+    assert server.convert_notes('"deck:Default"', "Spanish", BASIC_TO_SPANISH, limit=5, **kw)["converted"] == 5
+    rest = server.convert_notes('"deck:Default" note:Basic', "Spanish", BASIC_TO_SPANISH, **kw)  # trial done: the rest may go
+    assert rest["converted"] == 20 and all(anki.notes[i]["model"] == "Spanish" for i in ids)
+
+
+def test_convert_stops_at_the_first_error_and_logs_what_was_done(anki, tmp_path):
+    ids = _basics(anki, 4)
+    anki.fail_convert_ids = {ids[2]}
+    out = server.convert_notes('"deck:Default"', "Spanish", BASIC_TO_SPANISH, dry_run=False, confirm_all_devices_synced=True)
+    assert out["converted"] == 2 and out["failed"][0]["note_id"] == ids[2] and "Stopped at the first error" in out["next"]
+    assert anki.notes[ids[3]]["model"] == "Basic"
+    assert _json.loads((tmp_path / "convert_history.jsonl").read_text())["converted"] == ids[:2]
+
+
+def test_convert_aborts_before_changing_anything_when_the_backup_fails(anki):
+    ids = _basics(anki, 2)
+    anki.a_exportPackage = lambda deck, path, includeSched=False: False
+    with pytest.raises(AnkiError, match="did not export"):
+        server.convert_notes('"deck:Default"', "Spanish", BASIC_TO_SPANISH, dry_run=False, confirm_all_devices_synced=True)
+    assert all(anki.notes[i]["model"] == "Basic" for i in ids) and "updateNoteModel" not in anki.calls
+
+
+def test_convert_input_errors_say_what_to_do(anki):
+    _basics(anki, 1)
+    with pytest.raises(AnkiError, match="Yanki"):
+        server.convert_notes('"deck:Go"', "Basic", {"Front": "Front"})
+    with pytest.raises(AnkiError, match="several note types"):
+        server.convert_notes('"deck:Languages"', "Spanish", BASIC_TO_SPANISH)
+    with pytest.raises(AnkiError, match="already have"):
+        server.convert_notes('"deck:Default"', "Basic", {"Front": "Front"})
+    with pytest.raises(AnkiError, match="does not exist"):
+        server.convert_notes('"deck:Default"', "Nope", BASIC_TO_SPANISH)
+    with pytest.raises(AnkiError, match=r"Unknown target fields \['Wrod'\]"):
+        server.convert_notes('"deck:Default"', "Spanish", {"Wrod": "Front"})
+    with pytest.raises(AnkiError, match=r"unknown source fields \['Question'\]"):
+        server.convert_notes('"deck:Default"', "Spanish", {"Word": "Question"})
+    with pytest.raises(AnkiError, match="No notes match"):
+        server.convert_notes("zzzznothing", "Spanish", BASIC_TO_SPANISH)
+
+
+def test_convert_refuses_templates_that_do_not_line_up(anki):
+    with pytest.raises(AnkiError, match="templates don't line up"):
+        server.convert_notes('"deck:Languages::Latin"', "Spanish", {"Word": "Front", "Meaning": "Back"})

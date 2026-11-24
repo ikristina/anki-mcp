@@ -98,6 +98,7 @@ class Store(Protocol):
     def mods(self) -> dict[int, int]: ...
     def upsert(self, items: list[dict]) -> None: ...
     def delete(self, ids: Iterable[int]) -> None: ...
+    def set_decks(self, note_decks: dict[int, str]) -> int: ...
     def finish(self, model: str, dim: int) -> None: ...
 
 
@@ -207,6 +208,20 @@ class RedisStore:
         keys = [f"{self.prefix}{i}" for i in ids]
         for i in range(0, len(keys), 1000):
             self.r.delete(*keys[i : i + 1000])
+
+    def set_decks(self, note_decks: dict[int, str]) -> int:
+        """Change the deck of notes already in the index (a card move doesn't touch the note's mod time).
+        Notes not in the index are left out: hset on a missing key would create a half-empty hash."""
+        keys = [(nid, f"{self.prefix}{nid}") for nid in note_decks]
+        pipe = self.r.pipeline(transaction=False)
+        for _, k in keys:
+            pipe.exists(k)
+        present = [(nid, k) for (nid, k), e in zip(keys, pipe.execute()) if e]
+        pipe = self.r.pipeline(transaction=False)
+        for nid, k in present:
+            pipe.hset(k, "deck", note_decks[nid])
+        pipe.execute()
+        return len(present)
 
     def finish(self, model: str, dim: int) -> None:
         self.r.hset(self.meta_key, mapping={"model": model, "dim": dim, "indexed_at": int(time.time())})
@@ -335,6 +350,11 @@ def get_embedder() -> Embedder:
     if "embedder" not in _cache:
         _cache["embedder"] = Embedder()
     return _cache["embedder"]
+
+
+def update_decks(note_decks: dict[int, str]) -> int:
+    """Record that notes moved to other decks. Returns how many index entries changed; raises when Redis is unreachable."""
+    return get_store().set_decks(note_decks)
 
 
 def find_similar(text: str, k: int = 5, deck: str | None = None, exclude_id: int | None = None,

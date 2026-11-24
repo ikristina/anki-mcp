@@ -40,6 +40,7 @@ class FakeAnki:
         self.notes: dict[int, dict] = {}
         self.media: dict[str, str] = {}
         self.calls: list[str] = []
+        self.fail_convert_ids: set[int] = set()
         self.sync_error: str | None = None  # e.g. "Sync status 2 not one of [0, 1]", as real AnkiConnect words it
         self._next_id = 1000
         self._clock = 1_700_000_000  # note modified times: every add or field/tag change bumps it
@@ -151,11 +152,17 @@ class FakeAnki:
     def a_notesInfo(self, notes):
         return [self._info(nid) for nid in notes if nid in self.notes]
 
+    def a_changeDeck(self, cards, deck):
+        for c in cards:  # like real Anki: the note's modified time is untouched, and a missing deck is created
+            self.notes[c // 10]["deck"] = deck
+        self.a_createDeck(deck) if deck not in self.decks else None
+        return None
+
     def a_cardsInfo(self, cards):
         out = []
         for c in cards:
             n = self.notes[c // 10]
-            out.append({"cardId": c, "note": c // 10, "deckName": n["deck"], "lapses": n["lapses"], "factor": 2500,
+            out.append({"cardId": c, "note": c // 10, "deckName": n["deck"], "modelName": n["model"], "lapses": n["lapses"], "factor": 2500,
                         "interval": 3, "fields": self._info(c // 10)["fields"]})
         return out
 
@@ -166,6 +173,25 @@ class FakeAnki:
         if modelName not in MODELS:
             raise AnkiError(f"model was not found: {modelName}")
         return MODELS[modelName]
+
+    def a_modelTemplates(self, modelName):
+        if modelName not in TEMPLATES:
+            raise AnkiError(f"model was not found: {modelName}")
+        return {name: {"Front": "", "Back": ""} for name in TEMPLATES[modelName]}
+
+    def a_updateNoteModel(self, note):
+        """Like AnkiConnect: change the note type, set every field of the new type from `fields`, replace the tags."""
+        n = self.notes[note["id"]]
+        if note["modelName"] not in MODELS:
+            raise AnkiError(f"Model '{note['modelName']}' not found")
+        if self.fail_convert_ids and note["id"] in self.fail_convert_ids:
+            raise AnkiError("AnkiConnect error on 'updateNoteModel': Explicit conversion mappings are required.")
+        n["model"] = note["modelName"]
+        n["fields"] = {f: note["fields"].get(f, "") for f in MODELS[n["model"]]}
+        n["tags"] = list(note["tags"])
+        self._clock += 1
+        n["mod"] = self._clock
+        return None
 
     def a_modelFieldsOnTemplates(self, modelName):
         return TEMPLATES[modelName]
@@ -233,6 +259,8 @@ def anki(monkeypatch, tmp_path):
     fake = FakeAnki()
     # Never read or write the user's real ~/.config/anki-mcp/profiles.json.
     monkeypatch.setenv("ANKI_MCP_PROFILES", str(tmp_path / "profiles.json"))
+    monkeypatch.setenv("ANKI_MCP_HISTORY", str(tmp_path / "convert_history.jsonl"))
+    monkeypatch.setenv("ANKI_MCP_BACKUP_DIR", str(tmp_path / "backups"))
     monkeypatch.setattr(server, "invoke", fake)
     monkeypatch.setattr(rag, "invoke", fake)
     # Never reach the real Redis index or load the embedding model from a unit test: tests that need them patch these.

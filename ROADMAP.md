@@ -46,8 +46,8 @@ Two different operations with very different risk:
 | **Move cards to another deck** | `changeDeck` | kept | normal sync | low |
 | **Convert note type** (e.g. `Basic` → `Spanish`, mapping Front→Word, Back→Meaning) | `updateNoteModel` | kept | **schema change → one-way full sync** (the "force push") | high |
 
-- `move_cards(query, target_deck, dry_run=True)`: preview count and sample, then move.
-- `convert_notes(query, target_note_type, field_map, dry_run=True)`: the preview shows before/after for a few notes and lists unmapped fields that would lose data. Refuses Yanki decks (Yanki would recreate or overwrite them).
+- `move_cards(query, target_deck, dry_run=True)`: preview count and sample, then move. **Done (2026-11-23).**
+- `convert_notes(query, target_note_type, field_map, dry_run=True)` **(built 2026-11-23; not yet run on real notes)**: the preview shows before/after for a few notes and lists unmapped fields that would lose data. Refuses Yanki decks (Yanki would recreate or overwrite them).
 
 **Safety protocol for conversions** (the tool enforces it, rather than trusting the model to remember):
 1. Refuse unless the user confirms that **all devices are synced first**. Unsynced phone reviews are lost in a one-way sync.

@@ -21,10 +21,14 @@ My other Anki project: [anki-new-tab](https://github.com/ikristina/anki-new-tab)
 | `add_audio` | Adds pronunciation audio to *existing* notes that lack it; dry run by default, batches of ≤50, skips notes that already have audio. `replace=True` re-voices them (e.g. after switching voice), and `texts` sets the spoken text per note (e.g. with macrons) |
 | `update_notes` | Edits fields of existing notes and adds tags; dry run by default with an old → new diff, tags `mcp-edited`, refuses Yanki notes and edits that would drop audio |
 | `delete_notes` | Permanently deletes notes by id (cards and history too); dry run by default, refuses Yanki notes. Only on the user's explicit request |
+| `move_cards` | Moves the cards matching an Anki search into another deck (history kept, normal sync); dry run by default with a count, the decks they come from and a sample; ≤200 cards per call, skips Yanki cards, refuses a Yanki target, keeps the semantic index's deck filter right |
+| `convert_notes` | Changes the note type of existing notes (cards and review history kept) with a field map. **High risk: Anki then requires a one-way full sync.** Dry run by default; the real run needs the user's confirmation that every device is synced, backs up the affected decks to `.apkg` first, refuses a first run over 20 notes (trial batch first), stops at the first error and logs to a history file. Refuses Yanki notes |
 | `create_deck` | Creates an empty deck (and missing parents) so `add_notes` can use it; reports similar existing names, leaves an existing deck alone, supports `dry_run` |
 | `export_deck` | Writes a deck (with subdecks and media) to an `.apkg` file to share or back up; review history only if asked; never overwrites silently |
 | `sync` | Syncs desktop Anki with AnkiWeb (normal syncs only; refuses a full sync and says why), so notes added on a phone can be tidied and voiced remotely. See [docs/remote-from-phone.md](docs/remote-from-phone.md) |
 | `add_notes` | Batch add with validation, `dry_run`, duplicate check, auto-tag `mcp-added`, optional free TTS audio; refuses Yanki-owned decks. Warns (never blocks) about near-duplicates in any deck: the same word apart from article/case/accents (`cumbre` vs `la cumbre`), plus similar meaning when the [semantic index](#semantic-search-index-optional) is set up |
+
+Not sure what to ask for? [docs/capabilities.md](docs/capabilities.md) lists what's possible, what isn't yet, and what card-design terms mean.
 
 Skills in `.claude/skills/`:
 - `flashcards` routes cards: technical topics become markdown in the Obsidian vault (synced by Yanki), and everything else goes straight to Anki.
@@ -125,6 +129,7 @@ The tools work the same everywhere. The **skills** (`.claude/skills/`) are Claud
 ### Optional
 
 - `ANKI_CONNECT_URL`, if AnkiConnect isn't on `http://127.0.0.1:8765` (`claude mcp add anki -e ANKI_CONNECT_URL=http://... -- ...`).
+- `ANKI_MCP_BACKUP_DIR` (default `~/.config/anki-mcp/backups`) and `ANKI_MCP_HISTORY` (default `~/.config/anki-mcp/convert_history.jsonl`): where `convert_notes` writes its pre-conversion backups and its log.
 - `ANKI_MCP_EXPORT_DIR`: the folder `export_deck` uses when no path is given (default `~/Desktop`), e.g. a synced Google Drive or Dropbox folder.
 
 ### Semantic search index (optional)

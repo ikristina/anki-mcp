@@ -32,7 +32,7 @@ async def main():
     async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
         await s.initialize()
         names = {t.name for t in (await s.list_tools()).tools}
-        expected = {"list_decks", "describe_deck", "search_notes", "find_similar_notes", "get_notes", "get_weak_cards", "list_note_types", "add_notes", "add_audio", "update_notes", "delete_notes", "create_deck", "export_deck", "sync", "get_deck_profile", "set_deck_profile"}
+        expected = {"list_decks", "describe_deck", "search_notes", "find_similar_notes", "get_notes", "get_weak_cards", "list_note_types", "add_notes", "add_audio", "update_notes", "delete_notes", "create_deck", "move_cards", "convert_notes", "export_deck", "sync", "get_deck_profile", "set_deck_profile"}
         check("all tools registered", names == expected, ", ".join(sorted(names)))
 
         decks = items(await s.call_tool("list_decks", {}))
@@ -41,6 +41,15 @@ async def main():
         with tempfile.TemporaryDirectory() as tmp:  # writes a file outside the collection, never the collection itself
             exp = items(await s.call_tool("export_deck", {"deck": "Go", "path": f"{tmp}/go.apkg"}))[0]
             check("export_deck writes an .apkg", Path(exp["path"]).stat().st_size > 0 and exp["notes"] > 0, f"{exp['notes']} notes, {exp['bytes']} bytes")
+        mv = items(await s.call_tool("move_cards", {"query": '"deck:Languages::🇪🇸 Spanish" cumbre', "target_deck": "Languages::🇪🇸 Spanish"}))[0]
+        check("move_cards dry run moves nothing and counts cards already there", mv["dry_run"] and mv["would_move"] == 0 and mv["already_in_target"] > 0, f"{mv['already_in_target']} already there")
+        no_yanki = await s.call_tool("move_cards", {"query": "deck:Default", "target_deck": "Go"})
+        check("move_cards refuses a Yanki target", no_yanki.is_error and "Yanki" in no_yanki.content[0].text)
+        cv = items(await s.call_tool("convert_notes", {"query": '"deck:Languages::English" note:Cloze', "target_note_type": "Basic",
+                                                        "field_map": {"Front": "Text", "Back": "Back Extra"}, "limit": 2}))[0]
+        check("convert_notes dry run plans without converting or backing up", cv["dry_run"] and cv["notes"] == 2 and "backups" not in cv and cv["decks_to_back_up"], str(cv["decks_to_back_up"]))
+        refused = await s.call_tool("convert_notes", {"query": '"deck:Go"', "target_note_type": "Basic", "field_map": {"Front": "Front"}})
+        check("convert_notes refuses Yanki notes", refused.is_error and "Yanki" in refused.content[0].text)
         prof = items(await s.call_tool("get_deck_profile", {"deck": "Nonexistent deck"}))[0]
         check("get_deck_profile explains a missing profile", prof["profile"] is None and "describe_deck" in prof["hint"])
         by_name = {d["deck"]: d for d in decks}
