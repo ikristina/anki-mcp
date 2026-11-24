@@ -2,7 +2,7 @@
 
 A plain-language map of what this server lets an agent do with your Anki collection, what it can't do yet, and what the design vocabulary means. **Whoever adds a capability updates this file in the same change.** Tool details are in the README table; this page is for "what's possible?".
 
-Last updated: 2026-11-23 (note type creation, suspend/unsuspend added).
+Last updated: 2026-11-23 (English Vocab note type created, English deck converted).
 
 ## Things you can say
 
@@ -25,6 +25,10 @@ Last updated: 2026-11-23 (note type creation, suspend/unsuspend added).
 | "Remember how this deck works" | Saves conventions (voice, field rules, tags) for next time | `set_deck_profile` |
 
 Safety defaults: writes are dry runs first, everything added is tagged `mcp-added` (edited: `mcp-edited`, converted: `mcp-converted`), decks synced from Obsidian (Yanki) are never written to.
+
+## Worked example: the English deck
+
+`Languages::English` was rebuilt as `English Vocab` (Word, Definition, Example, Gap, IPA, Image, Audio). Two cards per note: **Recognition** (word, IPA and audio -> meaning) and **Recall** (definition + gap sentence -> type the word). Image is empty; to add it later, edit the notes.
 
 ## Not possible yet
 
