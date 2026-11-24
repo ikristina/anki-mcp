@@ -200,3 +200,25 @@ What building the suite taught (details and numbers in `docs/evals.md`):
 - The backup is `exportPackage` with scheduling for every deck holding an affected card, into `<backup dir>/<timestamp>[-n]/`, and the conversion refuses to start if any export fails or isn't a readable zip (reusing `export_deck`). Timestamps collide when two runs start in the same second (found by a test), so the folder gets a `-n` suffix. Anki also makes its own automatic backups.
 - The trial rule keys on the history file: more than 20 notes are refused until some notes of that exact source -> target pair were converted before. Unmapped source fields with content must be listed in `drop_fields`.
 - Fields are copied verbatim, so converting Cloze notes to a non-cloze type leaves `{{c1::…}}` in the text. A real cloze-to-vocabulary redesign needs text rewriting first (`update_notes`), then conversion.
+
+## create_note_type (2026-11-23)
+- AnkiConnect `createModel(modelName, inOrderFields, cardTemplates=[{Name, Front, Back}], css, isCloze)` makes a new note type and fails on a duplicate name. It cannot edit an existing type here (`updateModelTemplates`/`updateModelStyling` exist but are not wrapped, on purpose: editing a type that has notes is a riskier schema change).
+- Whether adding a note type forces a full sync is documented nowhere I could find; forum reports say it does (one-way sync prompt on desktop, then a choice on AnkiDroid). The tool assumes yes and uses the same confirmation as `convert_notes`.
+- A standard Anki note type can't hold both `{{cloze:}}` and ordinary templates. The user's "cloze" meant a hint, so English Vocab shows the gapped sentence (field `Gap`) as a hint on the Recall card, whose answer is typed with `{{type:Word}}`.
+- The placeholder checker handles `{{#F}}…{{/F}}`, `{{^F}}`, and filters (`type:`, `cloze:`, `hint:`); `FrontSide`, `Tags`, `Deck`, `Card` etc. are always allowed. Anki's dark mode adds the class `nightMode` to the card, which the CSS keys on.
+
+## suspend_cards (2026-11-23)
+- Suspending leaves interval, ease, due date and history alone; unsuspending restores the card's queue, so review cards that came due meanwhile are overdue at once. `limit` lets a big backlog come back in slices.
+- `is:new` in the query is how "hide only what I haven't started" works; learned cards keep their reviews. AnkiConnect `suspend(cards)` took 7,354 cards in about 5 s.
+- The tool tags suspended notes `mcp-suspended` so the undo touches only its own work, not cards the user suspended by hand. Yanki notes are not tagged (Yanki owns their tags and may overwrite or flag the change), so for them undo is "any suspended Yanki card in the search". Unknown: whether a Yanki sync resets suspension. Cockroach Labs (22 Yanki cards) was suspended first as the test; check it after the next Yanki sync.
+- Avoid parentheses in queries built by tools: FakeAnki's search parser doesn't do them. `suspend_cards` finds the cards and filters with separate `is:suspended` searches instead of appending terms.
+- `_` is a single-character wildcard in Anki search: use `_deck_term` (escapes it) for decks like `Norwegian_art`.
+
+## sync does not confirm or refuse (2026-11-23)
+- The installed AnkiConnect (2055492159, new "services" build) runs `sync` asynchronously: the call returns as soon as the request is accepted. When AnkiWeb requires a full sync it does not raise: desktop Anki shows "Anki requires a full sync. Choose the authoritative collection" with Upload / Download / Cancel buttons and waits for the user (gui.py, `state('waitingForUser')`), and later AnkiConnect calls queue behind that dialog. The old "Sync status N not one of [0, 1]" error (and `_FULL_SYNC_REASONS`) only applies to older builds. So `synced: True` means "requested", and a repeated call can re-raise the dialog. The tool now says so.
+- To see whether a sync really finished, read a copy of `~/Library/Application Support/Anki2/<profile>/collection.anki2` (copy first, open read-only): table `col` has `scm` (schema last modified, ms), `ls` (last successful sync, ms) and `mod`. `scm > ls` means the local schema changed since the last sync and a full sync is expected. `notetypes.mtime_secs` and `decks.mtime_secs` show what changed recently.
+
+## Yanki and parallel syncs (2026-11-23)
+- A Yanki sync of a new vault folder (`Fly`, 199 markdown notes) produced 398 Anki notes: every note twice, ids about a second apart. That pattern means two syncs ran at once (an automatic one plus a manual press, or two triggers). Sync once and wait for it to finish. The user deleted the folder in Obsidian and the deck in Anki; Yanki notes went back to 491 with no duplicates.
+- Suspension of Yanki cards survives a Yanki sync (Cockroach Labs stayed 22/22 suspended), so `suspend_cards` is safe on Yanki decks.
+- A full-sync dialog on a *second* computer is expected when that computer's collection is older than AnkiWeb's: Download there is right if it has no unsynced work. The dialog on the main computer was a false alarm (the user had pressed Sync on the other machine).

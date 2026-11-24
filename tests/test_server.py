@@ -617,3 +617,118 @@ def test_convert_input_errors_say_what_to_do(anki):
 def test_convert_refuses_templates_that_do_not_line_up(anki):
     with pytest.raises(AnkiError, match="templates don't line up"):
         server.convert_notes('"deck:Languages::Latin"', "Spanish", {"Word": "Front", "Meaning": "Back"})
+
+
+# --- create_note_type ----------------------------------------------------------------------------------------------
+
+from pathlib import Path as _Path  # noqa: E402
+
+ENGLISH_VOCAB = str(_Path(__file__).resolve().parent.parent / "examples" / "note_types" / "english-vocab.json")
+SIMPLE = dict(name="Mini Vocab", fields=["Word", "Meaning"],
+              templates=[server.CardTemplate(name="Card 1", front="{{Word}}", back="{{FrontSide}}<hr id=answer>{{Meaning}}")])
+
+
+def test_the_shipped_english_vocab_definition_is_valid(anki):
+    out = server.create_note_type(definition_file=ENGLISH_VOCAB)
+    assert out["dry_run"] and out["name"] == "English Vocab" and out["fields"][0] == "Word"
+    assert [t["name"] for t in out["templates"]] == ["Recognition", "Recall"]
+    assert out["templates"][1]["front_uses"] == ["Definition", "Gap", "Word"] and "full sync" in out["next"]
+    assert anki.created_model is None
+
+
+def test_create_note_type_dry_run_creates_nothing(anki):
+    out = server.create_note_type(**SIMPLE)
+    assert out["dry_run"] and anki.created_model is None and "createModel" not in anki.calls
+
+
+def test_create_note_type_needs_confirmation_of_synced_devices(anki):
+    with pytest.raises(AnkiError, match="every device is fully synced"):
+        server.create_note_type(**SIMPLE, dry_run=False)
+    assert anki.created_model is None
+
+
+def test_create_note_type_creates_it_and_says_to_do_the_full_sync(anki):
+    out = server.create_note_type(**SIMPLE, css=".card{}", dry_run=False, confirm_all_devices_synced=True)
+    assert out["created"] == "Mini Vocab" and "Upload to AnkiWeb" in out["next"] and "Adding a note type is probably" in out["next"]
+    assert anki.created_model["fields"] == ["Word", "Meaning"] and anki.created_model["css"] == ".card{}"
+    assert anki.created_model["templates"][0] == {"Name": "Card 1", "Front": "{{Word}}", "Back": "{{FrontSide}}<hr id=answer>{{Meaning}}"}
+    assert invoke_names(anki) and "Mini Vocab" in anki.a_modelNames()
+
+
+def invoke_names(anki):
+    return anki.a_modelFieldNames("Mini Vocab") == ["Word", "Meaning"]
+
+
+def test_create_note_type_checks_placeholders_and_names(anki):
+    bad = server.CardTemplate(name="Card 1", front="{{Wrod}}", back="{{Meaning}}")
+    with pytest.raises(AnkiError, match="front uses none of the fields"):
+        server.create_note_type(name="X", fields=["Word", "Meaning"], templates=[bad])
+    bad = server.CardTemplate(name="Card 1", front="{{Word}}", back="{{Meening}}")
+    with pytest.raises(AnkiError, match=r"unknown placeholders \['Meening'\]"):
+        server.create_note_type(name="X", fields=["Word", "Meaning"], templates=[bad])
+    with pytest.raises(AnkiError, match="already exists"):
+        server.create_note_type(**{**SIMPLE, "name": "Basic"})
+    with pytest.raises(AnkiError, match="Field names must be unique"):
+        server.create_note_type(**{**SIMPLE, "fields": ["Word", "Word"]})
+    with pytest.raises(AnkiError, match="needs a name, fields"):
+        server.create_note_type(name="X")
+    with pytest.raises(AnkiError, match="Cannot read note type definition"):
+        server.create_note_type(definition_file="/nonexistent/x.json")
+
+
+def test_template_refs_understand_anki_syntax():
+    refs = server._template_refs("{{#IPA}}{{IPA}}{{/IPA}} {{type:Word}} {{cloze:Text}} {{FrontSide}} {{^Image}}x{{/Image}} {{hint:Gap}}")
+    assert refs == {"IPA", "Word", "Text", "FrontSide", "Image", "Gap"}
+
+
+# --- suspend_cards -------------------------------------------------------------------------------------------------
+
+def _suspended(anki):
+    return {n["fields"].get("Word") or n["fields"].get("Front") for n in anki.notes.values() if n["suspended"]}
+
+
+def test_suspend_cards_dry_run_changes_nothing(anki):
+    out = server.suspend_cards('"deck:Languages::Spanish" is:new')
+    assert out["dry_run"] and out["would_change"] == 6 and out["by_deck"] == {"Languages::Spanish": 6}
+    assert _suspended(anki) == set() and "suspend" not in anki.calls
+
+
+def test_suspend_only_unseen_keeps_seen_cards_studyable(anki):
+    seen = anki.add("Languages::Spanish", "Spanish", {"Word": "estudiado", "Meaning": "studied"}, lapses=2)
+    out = server.suspend_cards('"deck:Languages::Spanish" is:new', dry_run=False)
+    assert out["changed"] == 6 and anki.notes[seen]["suspended"] is False and "Channels?" not in _suspended(anki)
+
+
+def test_suspend_tags_notes_but_not_yanki_and_skips_already_suspended(anki):
+    out = server.suspend_cards('"deck:Go"', dry_run=False)
+    go = next(n for n in anki.notes.values() if n["fields"].get("Front") == "Channels?")
+    assert out["changed"] == 1 and out["yanki_cards"] == 1 and go["suspended"] and "mcp-suspended" not in go["tags"]
+    server.suspend_cards('"deck:Languages::Latin"', dry_run=False)
+    latin = next(n for n in anki.notes.values() if n["fields"].get("Front") == "Socius")
+    assert latin["suspended"] and "mcp-suspended" in latin["tags"] and "latin" in latin["tags"]
+    again = server.suspend_cards('"deck:Languages::Latin"')
+    assert again["would_change"] == 0 and again["skipped"] == 3 and again["skipped_because"] == "already suspended"
+
+
+def test_unsuspend_restores_only_what_the_tool_suspended(anki):
+    mine = server.suspend_cards('"deck:Languages::Latin"', dry_run=False)
+    manual = next(n for n in anki.notes.values() if n["fields"].get("Word") == "el perro")
+    manual["suspended"] = True  # the user suspended this one by hand
+    out = server.suspend_cards('"deck:Languages::Latin"', suspend=False, dry_run=False)
+    assert mine["changed"] == 3 and out["changed"] == 3 and _suspended(anki) == {"el perro"}
+    assert all("mcp-suspended" not in n["tags"] for n in anki.notes.values())
+    other = server.suspend_cards('"deck:Languages::Spanish"', suspend=False)
+    assert other["would_change"] == 0 and "not suspended by this tool" in other["skipped_because"]
+
+
+def test_unsuspend_limit_wakes_cards_gradually(anki):
+    server.suspend_cards('"deck:Languages::Spanish"', dry_run=False)
+    out = server.suspend_cards('"deck:Languages::Spanish"', suspend=False, limit=2, dry_run=False)
+    assert out["changed"] == 2 and len(_suspended(anki)) == 4
+
+
+def test_suspend_cards_errors_say_what_to_do(anki):
+    with pytest.raises(AnkiError, match="empty one would match every card"):
+        server.suspend_cards(" ")
+    with pytest.raises(AnkiError, match="No cards match"):
+        server.suspend_cards("zzzznothing")

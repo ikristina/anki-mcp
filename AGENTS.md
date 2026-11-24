@@ -20,10 +20,11 @@ Run `pytest` after every change to `src/`, and the smoke test too when Anki is a
 
 ## Layout
 
-- `src/anki_mcp/server.py`: the MCP tools (`list_decks`, `describe_deck`, `list_note_types`, `search_notes`, `find_similar_notes`, `get_notes`, `get_weak_cards`, `add_notes`, `add_audio`, `update_notes`, `delete_notes`, `move_cards`, `convert_notes`, `create_deck`, `export_deck`, `sync`, `get_deck_profile`, `set_deck_profile`)
+- `src/anki_mcp/server.py`: the MCP tools (`list_decks`, `describe_deck`, `list_note_types`, `search_notes`, `find_similar_notes`, `get_notes`, `get_weak_cards`, `add_notes`, `add_audio`, `update_notes`, `delete_notes`, `move_cards`, `convert_notes`, `create_note_type`, `suspend_cards`, `create_deck`, `export_deck`, `sync`, `get_deck_profile`, `set_deck_profile`)
 - `src/anki_mcp/client.py`: AnkiConnect HTTP client and `AnkiError`
 - `src/anki_mcp/profiles.py`: deck profiles, a JSON file at `~/.config/anki-mcp/profiles.json` (`ANKI_MCP_PROFILES` overrides it; tests point it at a tmp dir)
 - `examples/profiles.json`: a sample of the maintainer's real profiles (not kept in sync)
+- `examples/note_types/english-vocab.json`: the English Vocab note type design (fields, two card templates, paper-style CSS) for `create_note_type(definition_file=…)`
 - `src/anki_mcp/telemetry.py`: OpenTelemetry spans, metrics and logs (API-only, no-op until `setup()` finds an OTLP endpoint; SDK/exporter in the `otel` extra)
 - `src/anki_mcp/rag.py`: optional semantic index (Redis 8 vectors + fastembed, `rag` extra, `anki-mcp-index` entry point). Heavy imports are lazy; only this module's functions may fail when Redis is down, never the existing tools
 - `src/anki_mcp/tts.py`: free TTS engines selected by voice string: `es-MX` (Google/gTTS), `espeak:la`, `macos:Alice`, `piper:<voice>` (local Piper `.onnx` voices)
@@ -48,7 +49,7 @@ Run `pytest` after every change to `src/`, and the smoke test too when Anki is a
 - Keep results compact: paginate, strip HTML, truncate previews. The real collection has ~14k notes.
 - Never print to stdout in the server (stdout carries the protocol). Log to stderr.
 - **Never write to the user's real collection in tests.** Use `dry_run=True`. `delete_notes` exists (dry run by default, refuses Yanki notes), but call it only when the user asks to delete, and only for ids they approved; it is deliberately left out of the skills' `allowed-tools`.
-- **`convert_notes` forces a one-way full sync.** Never call it with `dry_run=False` unless the user asked for a conversion, agreed to the plan and said every device is synced. The tool enforces the backup, trial batch and confirmation; don't try to get around them. Like `delete_notes`, it stays out of the skills' `allowed-tools`.
+- **`convert_notes` forces a one-way full sync.** Never call it with `dry_run=False` unless the user asked for a conversion, agreed to the plan and said every device is synced. The tool enforces the backup, trial batch and confirmation; don't try to get around them. Like `delete_notes`, it stays out of the skills' `allowed-tools`. `create_note_type` is the same kind of change (a schema change, most likely a full sync): dry run, show the plan, confirm that devices are synced, then create.
 - Decks with `source="yanki"` are generated from the user's Obsidian vault. `add_notes` must keep refusing them.
 - TTS wrappers must fail loudly on unsupported voices. Google's `la` and unknown macOS voices silently produce wrong audio, so they are rejected explicitly.
 - Deck-specific conventions (deck names, voices, field rules) belong in deck profiles, not in skills or server code.

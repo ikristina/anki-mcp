@@ -1144,6 +1144,142 @@ def convert_notes(
     return out
 
 
+class CardTemplate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: Annotated[str, Field(min_length=1, description="Card name, e.g. 'Recognition'.")]
+    front: Annotated[str, Field(description="Front HTML with {{Field}} placeholders; {{type:Field}} makes a type-in-the-answer box.")]
+    back: Annotated[str, Field(description="Back HTML. Start with {{FrontSide}} then <hr id=answer> to show the front above the answer.")]
+
+
+_FIELD_REF_RE = re.compile(r"\{\{\s*[#^/]?\s*(?:\w+:)*\s*([^{}:]+?)\s*\}\}")
+_SPECIAL_REFS = {"FrontSide", "Tags", "Type", "Deck", "Subdeck", "Card", "CardFlag"}
+
+
+def _template_refs(html_text: str) -> set[str]:
+    return {m.strip() for m in _FIELD_REF_RE.findall(html_text)}
+
+
+@mcp.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=False, open_world_hint=False))
+def create_note_type(
+    name: Annotated[str | None, Field(description="Name of the new note type, e.g. 'English Vocab'.")] = None,
+    fields: Annotated[list[str] | None, Field(description="Field names in order. The first is the one Anki uses for its duplicate check.")] = None,
+    templates: Annotated[list[CardTemplate] | None, Field(description="One entry per card type the note produces.")] = None,
+    css: Annotated[str | None, Field(description="Styling shared by every card of this type.")] = None,
+    definition_file: Annotated[str | None, Field(description="Absolute path to a JSON file with name, fields, templates, css (see examples/note_types/english-vocab.json). Other arguments override it.")] = None,
+    dry_run: Annotated[bool, Field(description="Default True: validate and show the plan. Set False to create.")] = True,
+    confirm_all_devices_synced: Annotated[bool, Field(description="Only True once the user confirmed that every device is fully synced.")] = False,
+) -> dict:
+    """Create a new note type (fields, card templates, styling), the thing that decides what a deck's cards contain and how they look.
+
+    Needed before a deck can have anything beyond Basic/Cloze: e.g. a vocabulary type with recognition and recall cards.
+    Dry run by default: checks every {{placeholder}} against the fields and shows the plan. Show the user the plan (or a
+    preview) first. Adding a note type is a schema change, so Anki will most likely require a one-way full sync
+    afterwards: the real run needs the user's confirmation that every device is synced, then the `next` steps are manual.
+    It never edits existing note types, and never touches notes. Use convert_notes to move notes into the new type.
+    """
+    spec: dict = {}
+    if definition_file:
+        path = Path(definition_file).expanduser()
+        try:
+            spec = json.loads(path.read_text())
+        except (OSError, ValueError) as e:
+            raise AnkiError(f"Cannot read note type definition {str(path)!r}: {e}. Give an absolute path to a JSON file with name, fields, templates, css.") from e
+    name = name or spec.get("name")
+    fields = fields if fields is not None else spec.get("fields")
+    css = css if css is not None else spec.get("css", "")
+    tpls = [t.model_dump() for t in templates] if templates else [CardTemplate(**t).model_dump() for t in spec.get("templates", [])]
+    if not name or not fields or not tpls:
+        raise AnkiError("A note type needs a name, fields and at least one card template: pass them, or definition_file.")
+    if any(not f.strip() or any(c in f for c in ':{}"') for f in fields) or len(set(fields)) != len(fields):
+        raise AnkiError(f"Field names must be unique, non-empty and without : {{ }} or quotes. Got {fields}.")
+    if len({t["name"] for t in tpls}) != len(tpls):
+        raise AnkiError("Card template names must be unique.")
+    existing = invoke("modelNames")
+    if name in existing:
+        raise AnkiError(f"Note type '{name}' already exists. Pick another name (similar existing: {_similar_decks(name, set(existing)) or 'none'}); editing an existing type isn't supported.")
+    allowed = set(fields) | _SPECIAL_REFS
+    plan = []
+    for t in tpls:
+        if not (_template_refs(t["front"]) & set(fields)):
+            raise AnkiError(f"Template '{t['name']}': the front uses none of the fields {fields}, so every card would be blank.")
+        for side in ("front", "back"):
+            if unknown := sorted(_template_refs(t[side]) - allowed):
+                raise AnkiError(f"Template '{t['name']}' {side} uses unknown placeholders {unknown}. Fields: {fields} (also {sorted(_SPECIAL_REFS)}).")
+        plan.append({"name": t["name"], "front_uses": sorted(_template_refs(t["front"]) & set(fields)), "back_uses": sorted(_template_refs(t["back"]) & set(fields))})
+    out: dict = {"dry_run": dry_run, "name": name, "fields": fields, "templates": plan, "css_chars": len(css)}
+    if dry_run:
+        out["next"] = ("Show the user this plan. Adding a note type most likely forces a one-way full sync, so ask them to sync every device "
+                       "first, then call again with dry_run=False and confirm_all_devices_synced=True.")
+        return out
+    if not confirm_all_devices_synced:
+        raise AnkiError("Refusing to create the note type until the user confirms every device is fully synced: adding it most likely forces a "
+                        "one-way full sync. Ask them to sync the phone and the desktop, wait for it to finish, then call again with "
+                        "confirm_all_devices_synced=True.")
+    invoke("createModel", modelName=name, inOrderFields=fields,
+           cardTemplates=[{"Name": t["name"], "Front": t["front"], "Back": t["back"]} for t in tpls], css=css, isCloze=False)
+    log.info("created note type %s (%d fields, %d templates)", name, len(fields), len(tpls))
+    out.update({"created": name, "next": "Created. " + _FULL_SYNC_STEPS.replace("Changing a note type is", "Adding a note type is probably")})
+    return out
+
+
+SUSPENDED_TAG = "mcp-suspended"
+
+
+@mcp.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=True, open_world_hint=False))
+def suspend_cards(
+    query: Annotated[str, Field(description="Anki search for the cards, e.g. '\"deck:Art\" is:new' (only cards never studied) or '\"deck:Art\"' (everything).")],
+    suspend: Annotated[bool, Field(description="True: suspend (hide from study). False: unsuspend, but only cards this tool suspended (tag mcp-suspended) plus Yanki cards.")] = True,
+    dry_run: Annotated[bool, Field(description="Default True: report what would change. Set False to apply.")] = True,
+    limit: Annotated[int | None, Field(ge=1, description="Change at most this many cards (e.g. unsuspend 50 at a time to avoid a backlog).")] = None,
+) -> dict:
+    """Suspend or unsuspend the cards matching a search. A suspended card never appears for study (new or review) until unsuspended.
+
+    Scheduling is untouched: unsuspending puts each card back in the queue it was in, with its due date unchanged, so
+    review cards that came due meanwhile are overdue at once (use `limit` to wake them gradually). Normal sync, no full sync.
+    To hide only what the user hasn't started, add `is:new` to the query and keep reviews going. Dry run first.
+    Suspended notes get the tag 'mcp-suspended' so the undo restores only what this tool suspended; Yanki notes are not
+    tagged (Yanki owns their tags), so unsuspending also wakes any Yanki card in the search that was suspended by hand.
+    """
+    if not query.strip():
+        raise AnkiError("Give an Anki search query, e.g. '\"deck:Art\" is:new'; an empty one would match every card.")
+    found = invoke("findCards", query=query)
+    if not found:
+        raise AnkiError(f"No cards match {query!r}. Check the query with search_notes first.")
+    already = set(invoke("findCards", query="is:suspended"))
+    yanki = set(invoke("findCards", query='"note:Yanki*"'))
+    if suspend:
+        todo = [c for c in found if c not in already]
+    else:
+        mine = set(invoke("findCards", query=f"tag:{SUSPENDED_TAG} is:suspended")) | (yanki & already)
+        todo = [c for c in found if c in mine]
+    skipped = len(found) - len(todo)
+    if limit:
+        todo = todo[:limit]
+    by_deck = {d: len(cs) for d, cs in invoke("getDecks", cards=todo).items()} if todo else {}
+    out: dict = {
+        "dry_run": dry_run,
+        "action": "suspend" if suspend else "unsuspend",
+        "matched": len(found),
+        ("would_change" if dry_run else "changed"): len(todo),
+        "skipped": skipped,
+        "skipped_because": "already suspended" if suspend else "not suspended by this tool (no mcp-suspended tag)",
+        "by_deck": dict(sorted(by_deck.items(), key=lambda kv: -kv[1])[:20]),
+        "yanki_cards": len([c for c in todo if c in yanki]),
+    }
+    if dry_run or not todo:
+        return out
+    invoke("suspend" if suspend else "unsuspend", cards=todo)
+    plain = [c for c in todo if c not in yanki]
+    if plain:
+        notes = invoke("cardsToNotes", cards=plain)
+        (invoke("addTags", notes=notes, tags=SUSPENDED_TAG) if suspend else invoke("removeTags", notes=notes, tags=SUSPENDED_TAG))
+    notes_written.add(len(todo), {"operation": "suspend" if suspend else "unsuspend"})
+    log.info("%s %d cards: %s", "suspended" if suspend else "unsuspended", len(todo), out["by_deck"])
+    out["note"] = ("Suspended. Sync so the phone hides them too. To undo: suspend_cards with suspend=False and the same query."
+                   if suspend else "Unsuspended. Sync so the phone shows them again.")
+    return out
+
+
 @mcp.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=True, open_world_hint=True))
 def sync() -> dict:
     """Sync the desktop collection with AnkiWeb, like pressing Sync in Anki.
@@ -1152,8 +1288,11 @@ def sync() -> dict:
     until it syncs. Call it again after writing, so the other devices get the changes. Media (audio files) transfers
     in the background and can take a minute after this returns; the user should then sync their phone.
 
-    Only normal (merging) syncs run. If AnkiWeb needs a full sync, which overwrites one side, nothing is changed and
-    the error explains why: only the user can choose which side to keep, in desktop Anki.
+    This only *requests* the sync; it returns as soon as Anki accepts it, not when it finishes. If AnkiWeb needs a full
+    sync (which overwrites one side), current AnkiConnect builds don't fail: desktop Anki pops up an Upload/Download
+    dialog and waits, and every later AnkiConnect call is stuck behind it. Only the user can choose a side, so if they
+    report that dialog, tell them to press Cancel and to choose nothing until they've checked both devices. Older builds
+    raise an error with the reason instead.
     """
     try:
         invoke("sync", timeout=120)
@@ -1169,8 +1308,10 @@ def sync() -> dict:
                 "writes here stay on this computer and won't reach the phone, so tell the user before making any."
             ) from e
         raise
-    log.info("synced with AnkiWeb")
-    return {"synced": True, "media": "transfers in the background; wait about a minute, then sync the phone"}
+    log.info("sync requested")
+    return {"synced": True, "note": "Sync requested: Anki accepted it, but this does not confirm it finished. If Anki shows an "
+            "Upload/Download dialog, the user must press Cancel and choose nothing (see the tool description). Media transfers in "
+            "the background; wait about a minute, then sync the phone."}
 
 
 @mcp.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=True, open_world_hint=False))

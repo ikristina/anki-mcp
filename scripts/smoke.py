@@ -32,7 +32,7 @@ async def main():
     async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
         await s.initialize()
         names = {t.name for t in (await s.list_tools()).tools}
-        expected = {"list_decks", "describe_deck", "search_notes", "find_similar_notes", "get_notes", "get_weak_cards", "list_note_types", "add_notes", "add_audio", "update_notes", "delete_notes", "create_deck", "move_cards", "convert_notes", "export_deck", "sync", "get_deck_profile", "set_deck_profile"}
+        expected = {"list_decks", "describe_deck", "search_notes", "find_similar_notes", "get_notes", "get_weak_cards", "list_note_types", "add_notes", "add_audio", "update_notes", "delete_notes", "create_deck", "move_cards", "convert_notes", "create_note_type", "suspend_cards", "export_deck", "sync", "get_deck_profile", "set_deck_profile"}
         check("all tools registered", names == expected, ", ".join(sorted(names)))
 
         decks = items(await s.call_tool("list_decks", {}))
@@ -50,6 +50,12 @@ async def main():
         check("convert_notes dry run plans without converting or backing up", cv["dry_run"] and cv["notes"] == 2 and "backups" not in cv and cv["decks_to_back_up"], str(cv["decks_to_back_up"]))
         refused = await s.call_tool("convert_notes", {"query": '"deck:Go"', "target_note_type": "Basic", "field_map": {"Front": "Front"}})
         check("convert_notes refuses Yanki notes", refused.is_error and "Yanki" in refused.content[0].text)
+        nt = items(await s.call_tool("create_note_type", {"definition_file": str(Path(__file__).resolve().parent.parent / "examples" / "note_types" / "english-vocab.json")}))[0]
+        check("create_note_type dry run validates the shipped English Vocab design", nt["dry_run"] and [t["name"] for t in nt["templates"]] == ["Recognition", "Recall"], nt["name"])
+        dup = await s.call_tool("create_note_type", {"name": "Basic", "fields": ["A"], "templates": [{"name": "c", "front": "{{A}}", "back": "{{A}}"}]})
+        check("create_note_type refuses an existing name", dup.is_error and "already exists" in dup.content[0].text)
+        sus = items(await s.call_tool("suspend_cards", {"query": '"deck:Languages::SpanishRandom" is:new'}))[0]
+        check("suspend_cards dry run changes nothing", sus["dry_run"] and "would_change" in sus and "changed" not in sus, f"{sus['would_change']} would change")
         prof = items(await s.call_tool("get_deck_profile", {"deck": "Nonexistent deck"}))[0]
         check("get_deck_profile explains a missing profile", prof["profile"] is None and "describe_deck" in prof["hint"])
         by_name = {d["deck"]: d for d in decks}

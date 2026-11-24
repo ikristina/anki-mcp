@@ -1,0 +1,17 @@
+{
+  "name": "English Vocab",
+  "fields": ["Word", "Definition", "Example", "Gap", "IPA", "Image", "Audio"],
+  "templates": [
+    {
+      "name": "Recognition",
+      "front": "<div class=\"side\">Recognition</div>\n<div class=\"word\">{{Word}}</div>\n{{#IPA}}<div class=\"ipa\">{{IPA}}</div>{{/IPA}}\n<div class=\"audio\">{{Audio}}</div>",
+      "back": "{{FrontSide}}\n<hr id=\"answer\">\n<div class=\"def\">{{Definition}}</div>\n{{#Example}}<p class=\"eg\">{{Example}}</p>{{/Example}}\n{{#Image}}<div class=\"img\">{{Image}}</div>{{/Image}}"
+    },
+    {
+      "name": "Recall",
+      "front": "<div class=\"side\">Recall</div>\n<div class=\"def\">{{Definition}}</div>\n{{#Gap}}<div class=\"hint\">Hint</div>\n<p class=\"eg\">{{Gap}}</p>{{/Gap}}\n<div class=\"type\">{{type:Word}}</div>",
+      "back": "{{FrontSide}}\n<hr id=\"answer\">\n<div class=\"word small\">{{Word}}</div>\n{{#IPA}}<div class=\"ipa\">{{IPA}}</div>{{/IPA}}\n<div class=\"audio\">{{Audio}}</div>\n{{#Example}}<p class=\"eg\">{{Example}}</p>{{/Example}}\n{{#Image}}<div class=\"img\">{{Image}}</div>{{/Image}}"
+    }
+  ],
+  "css": ".card { font-family: \"Iowan Old Style\", \"Palatino Linotype\", Palatino, Georgia, serif; font-size: 20px; line-height: 1.5; text-align: left; color: #2a2724; background: #fbf8f0; max-width: 620px; margin: 0 auto; padding: 18px 20px 26px; }\n.nightMode.card, .nightMode .card { color: #ece5d6; background: #24211d; }\n.side { font-family: \"Helvetica Neue\", Arial, sans-serif; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: #7a7266; padding-bottom: 8px; border-bottom: 3px double #d9d0bd; margin-bottom: 20px; }\n.nightMode .side { color: #a39a89; border-bottom-color: #3b362e; }\n.word { font-size: 2.4em; line-height: 1.1; font-weight: 600; letter-spacing: -.015em; margin: 6px 0 4px; overflow-wrap: anywhere; }\n.word.small { font-size: 1.6em; }\n.ipa { font-family: \"Helvetica Neue\", Arial, sans-serif; font-size: .85em; color: #7a7266; }\n.nightMode .ipa { color: #a39a89; }\n.audio { margin-top: 8px; }\n.def { font-size: 1.1em; margin: 4px 0 14px; }\n.eg { font-style: italic; border-left: 2px solid #d9d0bd; padding-left: 14px; margin: 14px 0; }\n.nightMode .eg { border-left-color: #3b362e; }\n.hint { font-family: \"Helvetica Neue\", Arial, sans-serif; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #7a7266; margin: 16px 0 4px; }\n.nightMode .hint { color: #a39a89; }\n.type { margin-top: 18px; }\n#typeans { font-family: inherit; font-size: 1.2em; }\ninput#typeans { background: transparent; color: inherit; border: 0; border-bottom: 2px solid #2a2724; border-radius: 0; padding: 4px 2px; width: 100%; }\n.nightMode input#typeans { border-bottom-color: #ece5d6; }\n.typeGood { color: #2f5d50; }\n.nightMode .typeGood { color: #8fb9a6; }\nhr#answer { border: 0; border-top: 1px solid #d9d0bd; margin: 18px 0; }\n.nightMode hr#answer { border-top-color: #3b362e; }\n.img img { max-width: 100%; max-height: 260px; border-radius: 3px; }\n"
+}

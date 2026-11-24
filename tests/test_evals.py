@@ -135,7 +135,7 @@ def test_fake_server_serves_fake_collection():
             await s.initialize()
             decks = [json.loads(c.text)["deck"] for c in (await s.call_tool("list_decks", {})).content]
             profile = json.loads((await s.call_tool("get_deck_profile", {"deck": "Languages::Latin"})).content[0].text)
-            gap = await s.call_tool("search_notes", {"query": "is:new"})
+            gap = await s.call_tool("search_notes", {"query": "is:due"})
             return decks, profile, gap
 
     decks, profile, gap = asyncio.run(go())

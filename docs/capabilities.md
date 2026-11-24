@@ -2,7 +2,7 @@
 
 A plain-language map of what this server lets an agent do with your Anki collection, what it can't do yet, and what the design vocabulary means. **Whoever adds a capability updates this file in the same change.** Tool details are in the README table; this page is for "what's possible?".
 
-Last updated: 2026-11-23.
+Last updated: 2026-11-23 (note type creation, suspend/unsuspend added).
 
 ## Things you can say
 
@@ -13,6 +13,8 @@ Last updated: 2026-11-23.
 | "What am I forgetting most?" | Your most-lapsed cards, optionally per deck | `get_weak_cards` |
 | "Fix / reword these cards", "add a tag" | Edits fields and tags, shows an old → new diff first | `update_notes` |
 | "Voice the cards that have no audio" | Backfills pronunciation on existing notes | `add_audio` |
+| "Make a new note type: these fields, these card types, this look" | Creates it from a design (see `examples/note_types/english-vocab.json`); needs a full sync afterwards | `create_note_type` |
+| "Stop showing me new cards in deck X" / "pause deck X" | Suspends the deck's never-studied cards (`is:new`) or all its cards; undo restores them, gradually if you like | `suspend_cards` |
 | "Make a new deck called …" | Creates an empty deck (and parents), warns about similar names | `create_deck` |
 | "Move these cards to deck Y" | Moves cards by search, keeps history; dry run first | `move_cards` |
 | "Turn these Basic notes into note type Z" | Changes the note type with a field map; **forces a one-way full sync**; backs up first | `convert_notes` |
@@ -26,7 +28,7 @@ Safety defaults: writes are dry runs first, everything added is tagged `mcp-adde
 
 ## Not possible yet
 
-- **Designing a note type**: choosing fields, card types (recognition, recall, typing, cloze, listening), templates and look. `create_deck` only makes the empty container; what its cards contain comes from the note type. AnkiConnect can create note types (`createModel`) and edit templates and styling, so this is a tool waiting to be built.
+- **Editing an existing note type** (add a field, change a template or its styling). New types can be created (`create_note_type`); changing one that has notes is a riskier schema change and isn't wrapped. `create_deck` only makes the empty container; what its cards contain comes from the note type.
 - **Deck options**: new cards per day, review limits, learning steps. Anki's deck-options screen only; AnkiConnect can't change them.
 - **Image cards and occlusion**: adding images to notes isn't wired up (audio is).
 - **Renaming or deleting decks**, merging decks.

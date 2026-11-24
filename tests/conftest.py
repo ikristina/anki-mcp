@@ -35,6 +35,9 @@ TEMPLATES = {
 
 class FakeAnki:
     def __init__(self):
+        self.models = {k: list(v) for k, v in MODELS.items()}  # per instance: create_note_type adds to it
+        self.templates = dict(TEMPLATES)
+        self.created_model: dict | None = None
         self.decks = ["Default", "Go", "DDIA", "DDIA::04_Transactions", "Languages", "Languages::Spanish",
                       "Languages::Latin", "Languages::_Pimsleur"]
         self.notes: dict[int, dict] = {}
@@ -62,9 +65,9 @@ class FakeAnki:
     def add(self, deck, model, fields, tags=(), lapses=0):
         nid = self._next_id
         self._next_id += 1
-        values = {f: fields.get(f, "") for f in MODELS[model]}
+        values = {f: fields.get(f, "") for f in self.models[model]}
         self._clock += 1
-        self.notes[nid] = {"deck": deck, "model": model, "fields": values, "tags": list(tags), "lapses": lapses, "mod": self._clock}
+        self.notes[nid] = {"deck": deck, "model": model, "fields": values, "tags": list(tags), "lapses": lapses, "mod": self._clock, "suspended": False}
         return nid
 
     def _info(self, nid):
@@ -94,7 +97,9 @@ class FakeAnki:
         elif term == "prop:lapses>0":
             ok = n["lapses"] > 0
         elif term == "is:suspended":
-            ok = False
+            ok = bool(n.get("suspended"))
+        elif term == "is:new":
+            ok = n["lapses"] == 0
         else:
             raise AssertionError(f"FakeAnki doesn't understand search term {term!r}")
         return ok != neg
@@ -107,7 +112,7 @@ class FakeAnki:
     def _check(self, note):
         if note["deckName"] not in self.decks:
             return "deck was not found"
-        first = MODELS[note["modelName"]][0]
+        first = self.models[note["modelName"]][0]
         dup = any(n["deck"] == note["deckName"] and n["model"] == note["modelName"]  # Anki: same deck and note type
                   and n["fields"][first] == note["fields"].get(first) for n in self.notes.values())
         if dup and not note.get("options", {}).get("allowDuplicate"):
@@ -152,6 +157,22 @@ class FakeAnki:
     def a_notesInfo(self, notes):
         return [self._info(nid) for nid in notes if nid in self.notes]
 
+    def a_suspend(self, cards, suspend=True):
+        for c in cards:
+            self.notes[c // 10]["suspended"] = suspend
+        return True
+
+    def a_unsuspend(self, cards):
+        return self.a_suspend(cards, False)
+
+    def a_cardsToNotes(self, cards):
+        return sorted({c // 10 for c in cards})
+
+    def a_removeTags(self, notes, tags):
+        for nid in notes:
+            self.notes[nid]["tags"] = [t for t in self.notes[nid]["tags"] if t not in tags.split()]
+        return None
+
     def a_changeDeck(self, cards, deck):
         for c in cards:  # like real Anki: the note's modified time is untouched, and a missing deck is created
             self.notes[c // 10]["deck"] = deck
@@ -167,34 +188,42 @@ class FakeAnki:
         return out
 
     def a_modelNames(self):
-        return list(MODELS)
+        return list(self.models)
 
     def a_modelFieldNames(self, modelName):
-        if modelName not in MODELS:
+        if modelName not in self.models:
             raise AnkiError(f"model was not found: {modelName}")
-        return MODELS[modelName]
+        return self.models[modelName]
 
     def a_modelTemplates(self, modelName):
-        if modelName not in TEMPLATES:
+        if modelName not in self.templates:
             raise AnkiError(f"model was not found: {modelName}")
-        return {name: {"Front": "", "Back": ""} for name in TEMPLATES[modelName]}
+        return {name: {"Front": "", "Back": ""} for name in self.templates[modelName]}
 
     def a_updateNoteModel(self, note):
         """Like AnkiConnect: change the note type, set every field of the new type from `fields`, replace the tags."""
         n = self.notes[note["id"]]
-        if note["modelName"] not in MODELS:
+        if note["modelName"] not in self.models:
             raise AnkiError(f"Model '{note['modelName']}' not found")
         if self.fail_convert_ids and note["id"] in self.fail_convert_ids:
             raise AnkiError("AnkiConnect error on 'updateNoteModel': Explicit conversion mappings are required.")
         n["model"] = note["modelName"]
-        n["fields"] = {f: note["fields"].get(f, "") for f in MODELS[n["model"]]}
+        n["fields"] = {f: note["fields"].get(f, "") for f in self.models[n["model"]]}
         n["tags"] = list(note["tags"])
         self._clock += 1
         n["mod"] = self._clock
         return None
 
+    def a_createModel(self, modelName, inOrderFields, cardTemplates, css=None, isCloze=False):
+        if modelName in self.models:
+            raise AnkiError("Model name already exists")
+        self.models[modelName] = list(inOrderFields)
+        self.templates[modelName] = {t["Name"]: [[], []] for t in cardTemplates}
+        self.created_model = {"name": modelName, "fields": inOrderFields, "templates": cardTemplates, "css": css}
+        return {"name": modelName}
+
     def a_modelFieldsOnTemplates(self, modelName):
-        return TEMPLATES[modelName]
+        return self.templates[modelName]
 
     def a_canAddNotesWithErrorDetail(self, notes):
         return [{"canAdd": not (e := self._check(n)), **({"error": e} if e else {})} for n in notes]
