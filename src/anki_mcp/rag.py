@@ -28,6 +28,7 @@ DIM = 384
 INDEX = "idx:anki_notes"
 KEY_PREFIX = "anki:note:"
 META_KEY = "anki:index:meta"
+_BUILD_HINT = "Build or refresh the index with `uv run --extra rag anki-mcp-index` (Anki must be running)."
 TEXT_CHARS = 600  # the model reads ~128 tokens anyway; this bounds what is stored in Redis
 
 _SOUND_RE = re.compile(r"\[sound:[^\]]*\]")
@@ -168,8 +169,20 @@ class RedisStore:
     def finish(self, model: str, dim: int) -> None:
         self.r.hset(self.meta_key, mapping={"model": model, "dim": dim, "indexed_at": int(time.time())})
 
+    def info(self) -> dict:
+        """Index size and when it was last fully brought up to date ({} fields missing before the first run)."""
+        import redis
+
+        try:
+            n = int(self.r.ft(self.index).info()["num_docs"]) if self._index_exists() else 0
+        except redis.RedisError as e:
+            raise AnkiError(f"Redis search index unavailable ({e}). {_BUILD_HINT}") from e
+        meta = {k.decode(): v.decode() for k, v in self.r.hgetall(self.meta_key).items()}
+        return {"notes": n, "model": meta.get("model"), "indexed_at": int(meta["indexed_at"]) if "indexed_at" in meta else None}
+
     def search(self, vector, k: int = 5, deck: str | None = None) -> list[dict]:
         """Nearest notes by cosine similarity; `deck` limits to that deck and its subdecks."""
+        import redis
         from redis.commands.search.query import Query
 
         flt = "*"
@@ -178,7 +191,10 @@ class RedisStore:
             flt = f"@deck:{{{d}|{d}\\:\\:*}}"
         q = (Query(f"({flt})=>[KNN {k} @vector $v AS dist]").sort_by("dist")
              .return_fields("dist", "text", "deck", "note_type").dialect(2).paging(0, k))
-        res = self.r.ft(self.index).search(q, query_params={"v": vector.tobytes()})
+        try:
+            res = self.r.ft(self.index).search(q, query_params={"v": vector.tobytes()})
+        except redis.RedisError as e:
+            raise AnkiError(f"Semantic search failed ({e}). {_BUILD_HINT}") from e
         return [{"note_id": int(d.id.removeprefix(self.prefix)), "similarity": round(1 - float(d.dist), 4),
                  "deck": d.deck, "note_type": d.note_type, "text": d.text} for d in res.docs]
 
@@ -253,6 +269,44 @@ def sync_index(
                   "seconds": round(time.monotonic() - start, 1)}
         log.info("indexed %s", result)
         return result
+
+
+_cache: dict[str, Any] = {}
+
+
+def get_store() -> RedisStore:
+    """One connection per process, checked for liveness each call so a Redis restart is noticed with a clear error."""
+    store = _cache.get("store")
+    if store is None:
+        store = _cache["store"] = RedisStore()
+    else:
+        try:
+            store.r.ping()
+        except Exception:
+            _cache.pop("store", None)
+            return get_store()
+    return store
+
+
+def get_embedder() -> Embedder:
+    """The model takes seconds to load, so keep it for the life of the server."""
+    if "embedder" not in _cache:
+        _cache["embedder"] = Embedder()
+    return _cache["embedder"]
+
+
+def find_similar(text: str, k: int = 5, deck: str | None = None, exclude_id: int | None = None,
+                 store: Store | Any = None, embedder: Embedder | Any = None) -> dict:
+    """Notes most similar in meaning to `text`, best first. Raises AnkiError when the index is missing or empty."""
+    with operation("rag search", rag_duration, {"rag.op": "search"}):
+        store = store or get_store()
+        info = store.info()
+        if not info["notes"]:
+            raise AnkiError(f"The semantic index is empty. {_BUILD_HINT}")
+        embedder = embedder or get_embedder()
+        hits = store.search(embedder.embed([text])[0], k + (1 if exclude_id else 0), deck)
+        hits = [h for h in hits if h["note_id"] != exclude_id][:k]
+        return {"results": hits, "index": info}
 
 
 def main() -> None:

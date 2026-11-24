@@ -120,7 +120,7 @@ In MCP the server does **retrieval only**. The agent is the generator, so no LLM
 - Index: `idx:anki_notes`, HNSW, cosine distance, plus TEXT on `text` for hybrid.
 - Key `anki:index:meta`: embedding model name, dimension, and last indexed time. **If the model changes, rebuild**: vectors from different models aren't comparable.
 
-**Status (2026-11-23): 8.1 done, 8.2 done. Next: 8.3.** Model: paraphrase-multilingual-MiniLM-L12-v2. Redis 8 runs in Docker (`anki-redis`, volume `anki-redis-data`, AOF + RDB). Indexer: `anki-mcp-index` (`src/anki_mcp/rag.py`). Eval script: `scripts/rag_eval.py`.
+**Status (2026-11-23): 8.1, 8.2, 8.3 done. Next: 8.4.** Model: paraphrase-multilingual-MiniLM-L12-v2. Redis 8 runs in Docker (`anki-redis`, volume `anki-redis-data`, AOF + RDB). Indexer: `anki-mcp-index` (`src/anki_mcp/rag.py`). Eval script: `scripts/rag_eval.py`.
 
 **Steps:**
 1. **8.1 Eval set and model spike (no server code). Done.** The sets are derived mechanically (near-duplicates, cross-language); the hand-written paraphrase/synonym set (`evals/retrieval/manual.json`) is still to do.
@@ -136,7 +136,7 @@ In MCP the server does **retrieval only**. The agent is the generator, so no LLM
    - Incremental updates re-embed only notes changed since the last run. Candidates: Anki's `edited:N` search term, or `notesInfo`'s modified time; check which AnkiConnect exposes cheaply.
    - Also remove notes deleted in Anki (diff the id sets).
    - Add spans and a duration metric via `telemetry.operation`.
-3. **8.3 `find_similar_notes(text | note_id, deck=None, k=5)`**: read-only tool returning note previews with similarity scores. Unit tests use a fake store, and `FakeAnki` gets whatever new search terms the indexer uses.
+3. **8.3 `find_similar_notes(text | note_id, deck=None, limit=5)`. Done:** read-only tool returning note previews with similarity scores. Unit tests use a fake store, and `FakeAnki` gets whatever new search terms the indexer uses.
 4. **8.4 Near-duplicate warning in `add_notes`.**
    - Dry-run results gain `similar: [...]` per note above a threshold tuned on the 8.1 pairs.
    - It warns and never blocks.

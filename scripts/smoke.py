@@ -32,7 +32,7 @@ async def main():
     async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
         await s.initialize()
         names = {t.name for t in (await s.list_tools()).tools}
-        expected = {"list_decks", "describe_deck", "search_notes", "get_notes", "get_weak_cards", "list_note_types", "add_notes", "add_audio", "update_notes", "delete_notes", "create_deck", "export_deck", "sync", "get_deck_profile", "set_deck_profile"}
+        expected = {"list_decks", "describe_deck", "search_notes", "find_similar_notes", "get_notes", "get_weak_cards", "list_note_types", "add_notes", "add_audio", "update_notes", "delete_notes", "create_deck", "export_deck", "sync", "get_deck_profile", "set_deck_profile"}
         check("all tools registered", names == expected, ", ".join(sorted(names)))
 
         decks = items(await s.call_tool("list_decks", {}))
@@ -63,6 +63,13 @@ async def main():
 
         page = items(await s.call_tool("search_notes", {"query": "deck:Go", "limit": 3}))[0]
         check("search_notes paginates", page["returned"] == 3 and page["total"] >= 3, f"{page['returned']} of {page['total']}")
+
+        sim = await s.call_tool("find_similar_notes", {"text": "to avoid", "limit": 3})
+        if sim.is_error:  # the semantic index is optional: then the error must say how to set it up
+            check("find_similar_notes explains a missing index", "anki-mcp-index" in sim.content[0].text or "rag" in sim.content[0].text, sim.content[0].text[:80])
+        else:
+            top = items(sim)[0]["results"]
+            check("find_similar_notes finds 'evitar' for 'to avoid'", any("evitar" in r["text"] for r in top), top[0]["text"][:50] if top else "-")
 
         weak = items(await s.call_tool("get_weak_cards", {"limit": 3}))
         check("get_weak_cards sorted by lapses", [c["lapses"] for c in weak] == sorted((c["lapses"] for c in weak), reverse=True),

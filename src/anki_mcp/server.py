@@ -247,6 +247,41 @@ def get_notes(
 
 
 @mcp.tool(annotations=READ_ONLY)
+def find_similar_notes(
+    text: Annotated[
+        str | None,
+        Field(description="Words, a sentence or a question to look up by meaning (any language), e.g. 'consensus' or 'el gato'."),
+    ] = None,
+    note_id: Annotated[int | None, Field(description="Instead of text: find notes similar to this existing note (it is left out).")] = None,
+    deck: Annotated[str | None, Field(description="Exact deck name (includes subdecks) to search in. Omit for the whole collection.")] = None,
+    limit: Annotated[int, Field(ge=1, le=20)] = 5,
+) -> dict:
+    """Find notes by meaning, not keywords: 'cards about consensus' finds Raft and Paxos cards, 'cat' finds 'el gato'.
+
+    Use it before adding a card to catch near-duplicates that exact search misses ('cumbre' vs 'la cumbre', or the
+    same question worded differently), and to find related cards. Results carry a similarity from 0 to 1 (about 0.8+
+    is usually a near-duplicate, 0.5-0.7 related), and `index.indexed_at` says when the index was last refreshed:
+    notes added since then are missing. Needs the optional semantic index; if it isn't set up the error says how.
+    Matching is fuzzy, so for exact words use search_notes.
+    """
+    from anki_mcp import rag  # optional dependencies stay out of every other tool's way
+
+    if (text is None) == (note_id is None):
+        raise AnkiError("Give exactly one of `text` or `note_id`.")
+    if note_id is not None:
+        found = [n for n in invoke("notesInfo", notes=[note_id]) if n.get("noteId")]
+        if not found:
+            raise AnkiError(f"No note with id {note_id}. Get ids from search_notes.")
+        text = rag.note_text(found[0])
+        if not text:
+            raise AnkiError(f"Note {note_id} has no text to compare (image-only?).")
+    result = rag.find_similar(text, k=limit, deck=deck, exclude_id=note_id)
+    for r in result["results"]:
+        r["text"] = _plain(r["text"], PREVIEW_CHARS)
+    return result
+
+
+@mcp.tool(annotations=READ_ONLY)
 def get_weak_cards(
     deck: Annotated[str | None, Field(description="Exact deck name (includes subdecks). Omit for all decks.")] = None,
     limit: Annotated[int, Field(ge=1, le=50)] = 15,

@@ -1,6 +1,10 @@
 """Indexer logic against FakeAnki with an in-memory store and a fake embedder (no Redis, no model download)."""
 
 import numpy as np
+import pytest
+
+from anki_mcp import server
+from anki_mcp.client import AnkiError
 
 from anki_mcp import rag
 
@@ -50,6 +54,15 @@ class MemoryStore:
 
     def finish(self, model, dim):
         self.meta = {"model": model, "dim": dim}
+
+    def info(self):
+        return {"notes": len(self.items), "model": self.meta.get("model"), "indexed_at": 1_700_000_000 if self.meta else None}
+
+    def search(self, vector, k=5, deck=None):
+        rows = [it for it in self.items.values() if not deck or it["deck"] == deck or it["deck"].startswith(deck + "::")]
+        rows.sort(key=lambda it: -float(it["vector"] @ vector))
+        return [{"note_id": it["id"], "similarity": round(float(it["vector"] @ vector), 4), "deck": it["deck"],
+                 "note_type": it["note_type"], "text": it["text"]} for it in rows[:k]]
 
 
 def run(anki, store, emb, **kw):
@@ -150,3 +163,46 @@ def test_a_missing_card_does_not_abort_the_run(anki):
     res = run(anki, store, emb)
     assert res["indexed"] == len(anki.notes) and store.items[nid]["deck"] == "?"
     assert store.items[nid + 1]["deck"] != "?"
+
+
+@pytest.fixture
+def indexed(anki, monkeypatch):
+    store, emb = MemoryStore(), FakeEmbedder()
+    run(anki, store, emb)
+    monkeypatch.setattr(rag, "get_store", lambda: store)
+    monkeypatch.setattr(rag, "get_embedder", lambda: emb)
+    return store
+
+
+def test_find_similar_notes_by_text_ranks_best_first_with_index_info(anki, indexed):
+    text = next(it["text"] for it in indexed.items.values() if it["text"].startswith("el perro"))
+    out = server.find_similar_notes(text=text, limit=3)
+    assert out["results"][0]["similarity"] == 1.0 and out["results"][0]["text"].startswith("el perro")
+    assert len(out["results"]) == 3 and out["index"]["notes"] == len(anki.notes) and out["index"]["indexed_at"]
+
+
+def test_find_similar_notes_by_note_id_leaves_that_note_out(anki, indexed):
+    nid = next(i for i, n in anki.notes.items() if n["fields"].get("Word") == "el perro")
+    out = server.find_similar_notes(note_id=nid, limit=20)
+    assert nid not in [r["note_id"] for r in out["results"]] and len(out["results"]) == len(anki.notes) - 1
+
+
+def test_find_similar_notes_deck_filter_includes_subdecks(anki, indexed):
+    out = server.find_similar_notes(text="anything", deck="Languages", limit=20)
+    assert out["results"] and all(r["deck"].startswith("Languages") for r in out["results"])
+    assert not server.find_similar_notes(text="anything", deck="Nonexistent")["results"]
+
+
+def test_find_similar_notes_rejects_bad_arguments_with_a_fix(anki, indexed):
+    for kw in ({}, {"text": "x", "note_id": 1000}):
+        with pytest.raises(AnkiError, match="exactly one"):
+            server.find_similar_notes(**kw)
+    with pytest.raises(AnkiError, match="No note with id 424242"):
+        server.find_similar_notes(note_id=424242)
+
+
+def test_find_similar_notes_with_an_empty_index_says_how_to_build_it(anki, monkeypatch):
+    monkeypatch.setattr(rag, "get_store", lambda: MemoryStore())
+    monkeypatch.setattr(rag, "get_embedder", lambda: FakeEmbedder())
+    with pytest.raises(AnkiError, match="anki-mcp-index"):
+        server.find_similar_notes(text="x")

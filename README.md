@@ -14,6 +14,7 @@ My other Anki project: [anki-new-tab](https://github.com/ikristina/anki-new-tab)
 | `describe_deck` | Works out a deck's format: note types, fields, audio field and its source, code values (e.g. WordType), templates, tag patterns, samples |
 | `list_note_types` | Note types with fields in order and note counts; filter by name to also see template front/back fields. For empty decks or newly imported types |
 | `search_notes` | Anki search syntax, paginated compact previews |
+| `find_similar_notes` | Finds notes by *meaning* ("cards about consensus", "cat" → *el gato*), from a text or an existing note id; catches near-duplicates exact search misses. Needs the optional [semantic index](#semantic-search-index-optional) |
 | `get_notes` | Full content for specific note ids; `raw=True` returns stored HTML and `[sound:]` tags, for editing |
 | `get_weak_cards` | Most-forgotten cards (lapses, then ease), optionally per deck |
 | `get_deck_profile` / `set_deck_profile` | Your saved per-deck conventions (note type, audio field + voice, how to fill each field, tags, rules). Stored in a local JSON file, not in Anki |
@@ -126,9 +127,9 @@ The tools work the same everywhere. The **skills** (`.claude/skills/`) are Claud
 - `ANKI_CONNECT_URL`, if AnkiConnect isn't on `http://127.0.0.1:8765` (`claude mcp add anki -e ANKI_CONNECT_URL=http://... -- ...`).
 - `ANKI_MCP_EXPORT_DIR`: the folder `export_deck` uses when no path is given (default `~/Desktop`), e.g. a synced Google Drive or Dropbox folder.
 
-### Semantic search index (optional, in progress)
+### Semantic search index (optional)
 
-An index of every note's meaning, so a future `find_similar_notes` tool can answer "cards about consensus" or catch a near-duplicate that Anki's exact-match check misses. Only the indexer exists so far; nothing in the existing tools depends on it, and the server works the same without it.
+An index of every note's meaning, which the `find_similar_notes` tool searches: "cards about consensus", or a near-duplicate that Anki's exact-match check misses. No other tool depends on it, and the server works the same without it (`find_similar_notes` then says how to set it up).
 
 ```bash
 docker run -d --name anki-redis --restart unless-stopped -p 127.0.0.1:6379:6379 \
@@ -140,6 +141,7 @@ uv run --extra rag anki-mcp-index      # Anki must be running; first run embeds 
 - Embeddings come from a free local model (`paraphrase-multilingual-MiniLM-L12-v2`, 384 dimensions, handles Spanish, French, Norwegian, Latin and English) and are stored in **Redis 8** (vector search built in). The volume and AOF/RDB settings above keep them across restarts; the index is derived data, so it can always be rebuilt.
 - Later runs re-embed only notes that changed since the last run and drop deleted ones. `--full` rebuilds from scratch, `--limit N` caps one run. Changing the model rebuilds automatically.
 - A card moved to another deck keeps its old deck in the index until the next `--full` run (Anki doesn't bump a note's modified time on a move).
+- To use the tool from an agent, register the server with the extra: `claude mcp add anki --scope user -- uv --directory /absolute/path/to/anki-mcp run --extra rag anki-mcp`. Re-run `anki-mcp-index` now and then (it takes seconds when little changed): notes added since the last run aren't found yet, and `find_similar_notes` reports `indexed_at`.
 - `ANKI_MCP_REDIS_URL` points at a different Redis. If Redis is down, only these commands fail, with a message saying how to start it.
 - How the model was chosen: `uv run --extra rag python scripts/rag_eval.py build` then `score` (recall@5 and MRR on query sets derived from your own collection; results stay in the gitignored `evals/retrieval/`). Plan: [ROADMAP.md](ROADMAP.md), Phase 8.
 
