@@ -30,6 +30,10 @@ Safety defaults: writes are dry runs first, everything added is tagged `mcp-adde
 
 `Languages::English` was rebuilt as `English Vocab` (Word, Definition, Example, Gap, IPA, Image, Audio). Two cards per note: **Recognition** (word, IPA and audio -> meaning) and **Recall** (definition + gap sentence -> type the word). Image is empty; to add it later, edit the notes.
 
+## Restyling an existing note type
+
+The look of an existing type (CSS and template layout) can be changed without a full sync, but it applies to every deck that uses the type. There is no tool yet; it was done once with a script (`examples/note_types/basic-reversed-index-style.py`) after saving the old version to `~/.config/anki-mcp/backups/`. Pimsleur 1 and 2, SpanishRandom and Latin now use the Index look.
+
 ## Not possible yet
 
 - **Editing an existing note type** (add a field, change a template or its styling). New types can be created (`create_note_type`); changing one that has notes is a riskier schema change and isn't wrapped. `create_deck` only makes the empty container; what its cards contain comes from the note type.

@@ -229,3 +229,8 @@ What building the suite taught (details and numbers in `docs/evals.md`):
 - IPA: free dictionaryapi.dev (curl works; Python urllib got blocked) covered most words; it mixes IPA styles (ɹ, ɛ, d͡ʒ, (r)), so normalise. Some entries are junk (`/joke/`, `/-də-/`): check every IPA that is ASCII-only or has brackets.
 - Inflected clozes (`dissented`, `withered`...) were changed to the base verb in Word; the gap keeps any suffix that sat outside the cloze.
 - Field rewrite of 173 notes went through AnkiConnect `updateNoteFields` directly (pasting them through `update_notes` risked typos); it only touched empty Definition fields of English Vocab notes.
+
+## Restyling an existing note type (2026-11-23)
+- AnkiConnect `updateModelTemplates` + `updateModelStyling` change the look and card layout of an existing note type. Checked `col.scm` (schema-modified time) before and after: unchanged, so no full sync. Read the collection with its `-wal` file copied too, otherwise a copy looks stale.
+- Styling belongs to the note type, shared by every deck using it. "Basic (and reversed card)" is used by Pimsleur 1 and 2, SpanishRandom and Latin; restyling it changed all four. Old templates and CSS were saved to `~/.config/anki-mcp/backups/basic-reversed-style-*.json`.
+- Script used: `examples/note_types/basic-reversed-index-style.py` (Index look: white card, one red dot, light type; dark mode via `.nightMode`). Not yet a server tool.
