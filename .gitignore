@@ -33,4 +33,5 @@ htmlcov/
 Thumbs.db
 .DS_Store
 evals/results/
-.history/evals/retrieval/
+.history/
+evals/retrieval/
