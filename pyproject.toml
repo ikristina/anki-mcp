@@ -9,12 +9,15 @@ dependencies = ["mcp>=2.2,<3", "gtts>=2.5", "edge-tts>=7"]
 
 [project.scripts]
 anki-mcp = "anki_mcp.server:main"
+anki-mcp-index = "anki_mcp.rag:main"
 
 [project.optional-dependencies]
 otel = [
     "opentelemetry-exporter-otlp-proto-http>=1.28",
     "opentelemetry-sdk>=1.28",
 ]
+
+rag = ["fastembed>=0.5", "redis>=5"]
 
 [dependency-groups]
 dev = [

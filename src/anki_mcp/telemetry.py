@@ -34,6 +34,7 @@ ankiconnect_duration = meter.create_histogram(
     "anki_mcp.ankiconnect.duration", unit="s", description="AnkiConnect request duration, by action and outcome."
 )
 tts_duration = meter.create_histogram("anki_mcp.tts.duration", unit="s", description="Audio synthesis duration, by engine and outcome.")
+rag_duration = meter.create_histogram("anki_mcp.rag.duration", unit="s", description="Semantic index runs, by operation and outcome.")
 notes_written = meter.create_counter(
     "anki_mcp.notes.written", description="Notes changed in the collection, by operation (add, audio, update)."
 )

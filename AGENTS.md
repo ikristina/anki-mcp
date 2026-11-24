@@ -25,9 +25,11 @@ Run `pytest` after every change to `src/`, and the smoke test too when Anki is a
 - `src/anki_mcp/profiles.py`: deck profiles, a JSON file at `~/.config/anki-mcp/profiles.json` (`ANKI_MCP_PROFILES` overrides it; tests point it at a tmp dir)
 - `examples/profiles.json`: a sample of the maintainer's real profiles (not kept in sync)
 - `src/anki_mcp/telemetry.py`: OpenTelemetry spans, metrics and logs (API-only, no-op until `setup()` finds an OTLP endpoint; SDK/exporter in the `otel` extra)
+- `src/anki_mcp/rag.py`: optional semantic index (Redis 8 vectors + fastembed, `rag` extra, `anki-mcp-index` entry point). Heavy imports are lazy; only this module's functions may fail when Redis is down, never the existing tools
 - `src/anki_mcp/tts.py`: free TTS engines selected by voice string: `es-MX` (Google/gTTS), `espeak:la`, `macos:Alice`, `piper:<voice>` (local Piper `.onnx` voices)
 - `tests/`: unit tests; `conftest.py` has `FakeAnki`, an in-memory AnkiConnect
 - `scripts/smoke.py`: stdio client that asserts on real tool results against the real collection
+- `scripts/rag_eval.py`: read-only embedding-model comparison (recall@5, MRR) on query sets derived from the real collection; output in gitignored `evals/retrieval/`
 - `scripts/otel_traffic.py`: random read-only/dry-run tool traffic with OTLP export on, to fill Grafana (see docs/observability.md)
 - `evals/`: agent evals. `run.py` runs `claude -p` per case in an isolated temp dir and scores the tool calls (`cases.py`); `fake_server.py` (the server on `FakeAnki`) and `fake_obsidian.py` (record-only Obsidian stub) are the only MCP servers it loads. `--rescore` re-applies changed checks to stored runs. Results: `docs/evals.md`
 - `.claude/skills/`: `flashcards` (routes technical cards to Obsidian/Yanki) and `language-cards` (vocab + audio)

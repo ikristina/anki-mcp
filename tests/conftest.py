@@ -41,6 +41,7 @@ class FakeAnki:
         self.calls: list[str] = []
         self.sync_error: str | None = None  # e.g. "Sync status 2 not one of [0, 1]", as real AnkiConnect words it
         self._next_id = 1000
+        self._clock = 1_700_000_000  # note modified times: every add or field/tag change bumps it
         for word, meaning, wt, g in [("la cumbre", "peak", "N", "f"), ("el perro", "dog", "N", "m"),
                                      ("correr", "to run", "V", ""), ("rápido", "fast", "Adj", ""),
                                      ("la casa", "house", "N", "f"), ("de nada", "you're welcome", "Expr", "")]:
@@ -60,7 +61,8 @@ class FakeAnki:
         nid = self._next_id
         self._next_id += 1
         values = {f: fields.get(f, "") for f in MODELS[model]}
-        self.notes[nid] = {"deck": deck, "model": model, "fields": values, "tags": list(tags), "lapses": lapses}
+        self._clock += 1
+        self.notes[nid] = {"deck": deck, "model": model, "fields": values, "tags": list(tags), "lapses": lapses, "mod": self._clock}
         return nid
 
     def _info(self, nid):
@@ -139,6 +141,9 @@ class FakeAnki:
             out.setdefault(self.notes[c // 10]["deck"], []).append(c)
         return out
 
+    def a_notesModTime(self, notes):
+        return [{"noteId": nid, "mod": self.notes[nid]["mod"]} for nid in notes if nid in self.notes]
+
     def a_notesInfo(self, notes):
         return [self._info(nid) for nid in notes if nid in self.notes]
 
@@ -181,6 +186,8 @@ class FakeAnki:
 
     def a_updateNoteFields(self, note):
         self.notes[note["id"]]["fields"].update(note["fields"])
+        self._clock += 1
+        self.notes[note["id"]]["mod"] = self._clock
         return None
 
     def a_addTags(self, notes, tags):

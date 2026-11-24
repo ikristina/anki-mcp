@@ -126,6 +126,23 @@ The tools work the same everywhere. The **skills** (`.claude/skills/`) are Claud
 - `ANKI_CONNECT_URL`, if AnkiConnect isn't on `http://127.0.0.1:8765` (`claude mcp add anki -e ANKI_CONNECT_URL=http://... -- ...`).
 - `ANKI_MCP_EXPORT_DIR`: the folder `export_deck` uses when no path is given (default `~/Desktop`), e.g. a synced Google Drive or Dropbox folder.
 
+### Semantic search index (optional, in progress)
+
+An index of every note's meaning, so a future `find_similar_notes` tool can answer "cards about consensus" or catch a near-duplicate that Anki's exact-match check misses. Only the indexer exists so far; nothing in the existing tools depends on it, and the server works the same without it.
+
+```bash
+docker run -d --name anki-redis --restart unless-stopped -p 127.0.0.1:6379:6379 \
+  -v anki-redis-data:/data redis:8 redis-server --appendonly yes --save "60 1" --save "300 100"
+uv sync --extra rag                    # fastembed (ONNX, no torch) + the Redis client
+uv run --extra rag anki-mcp-index      # Anki must be running; first run embeds everything (a few minutes)
+```
+
+- Embeddings come from a free local model (`paraphrase-multilingual-MiniLM-L12-v2`, 384 dimensions, handles Spanish, French, Norwegian, Latin and English) and are stored in **Redis 8** (vector search built in). The volume and AOF/RDB settings above keep them across restarts; the index is derived data, so it can always be rebuilt.
+- Later runs re-embed only notes that changed since the last run and drop deleted ones. `--full` rebuilds from scratch, `--limit N` caps one run. Changing the model rebuilds automatically.
+- A card moved to another deck keeps its old deck in the index until the next `--full` run (Anki doesn't bump a note's modified time on a move).
+- `ANKI_MCP_REDIS_URL` points at a different Redis. If Redis is down, only these commands fail, with a message saying how to start it.
+- How the model was chosen: `uv run --extra rag python scripts/rag_eval.py build` then `score` (recall@5 and MRR on query sets derived from your own collection; results stay in the gitignored `evals/retrieval/`). Plan: [ROADMAP.md](ROADMAP.md), Phase 8.
+
 ### Observability (optional): OpenTelemetry traces, metrics and logs
 
 The server always logs to stderr (Claude Code keeps it in its MCP logs; `ANKI_MCP_LOG_LEVEL=DEBUG` for more). To export traces, metrics and logs over OTLP/HTTP, install the `otel` extra and point it at a collector. The quickest local backend is Grafana's all-in-one image, which stores all three signals and has a UI at http://localhost:3000:
@@ -186,6 +203,7 @@ Listen before trusting a voice. Even a good one mispronounces rare words: Google
 ```bash
 uv run pytest -q                # unit tests: fake in-memory AnkiConnect, no Anki/network needed (runs in CI)
 uv run python scripts/smoke.py  # end-to-end over stdio against your real collection (read-only; Anki must be running)
+uv run --extra rag python scripts/rag_eval.py build && uv run --extra rag python scripts/rag_eval.py score  # embedding-model comparison on your collection (read-only, free)
 uv run python evals/run.py --models haiku sonnet --repeats 5  # agent evals via `claude -p` against fakes (uses plan usage)
 ```
 

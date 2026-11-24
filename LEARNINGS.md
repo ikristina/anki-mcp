@@ -172,3 +172,13 @@ What building the suite taught (details and numbers in `docs/evals.md`):
   Unofficial, so it can break; errors tell the user to retry or add the note without audio. The official route is
   Azure AI Speech (free F0 tier, ~500k chars/month, needs a key) if this ever stops working.
 - `random:a,b` voices are resolved per text by hash (not `random()`), so re-running audio or `replace` checks give the same voice and filename.
+
+## Semantic index (Phase 8.1–8.2, 2026-11-23)
+- **Eval before model choice, and the baseline must be fair.** My first keyword baseline searched the full note text, which contains the English side, so it "won" the cross-language set (0.87 recall@5). Handicapped to the foreign side like the embeddings, it scored 0.03 vs MiniLM 0.80. On near-duplicates (`cumbre` vs `la cumbre`) plain substring matching still wins (0.97 vs 0.55), so the duplicate warning should be lexical first, embeddings second.
+- fastembed has no multilingual-e5-small or bge-m3. Its multilingual options: paraphrase-multilingual-MiniLM-L12-v2 (0.22 GB, chosen), -mpnet-base (1 GB), multilingual-e5-large (2.2 GB), potion-multilingual-128M (fast but weak: 0.52 cross). MiniLM embeds all ~10.5k notes in about 105 s on the Mac.
+- **Redis TAG queries: escape only ASCII punctuation and spaces.** A backslash before a non-ASCII character (the 🇪🇸 in a deck name) is `SEARCH_SYNTAX Syntax error`. Only a live check found this; FakeAnki-style unit tests can't. Use `SEPARATOR "|"` on TAG fields because the default `,` would split deck names containing commas.
+- `redis:8` ships the search module (`FT.*`), vectorset, ReJSON and timeseries. `FT._LIST` returns index names as bytes.
+- Anki bumps a note's `mod` when fields or tags change, not when a card changes deck, so incremental indexing misses moves; `--full` fixes it. `notesModTime` is the cheap way to get every note's mod in one call.
+- Blank notes store nothing in Redis, so they are re-read on every run (counted as `skipped_empty`) but never embedded.
+- Colima (not Docker Desktop) provides Docker on this Mac and doesn't autostart after a reboot: `colima start` first.
+- **Write the index metadata when the index is created, not at the end of the run.** The first real run died midway (a missing card broke `getDecks`); with no model recorded, the next run read "no model" as "model changed" and wiped the 3,600 notes already embedded. `ensure_index` now records the model immediately and only rebuilds when a recorded model differs. `getDecks` also fails a whole batch on one missing card, so `_card_decks` retries one card at a time.
