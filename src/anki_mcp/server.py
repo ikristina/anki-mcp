@@ -1293,7 +1293,7 @@ def create_note_type(
         raise AnkiError("Card template names must be unique.")
     existing = invoke("modelNames")
     if name in existing:
-        raise AnkiError(f"Note type '{name}' already exists. Pick another name (similar existing: {_similar_decks(name, set(existing)) or 'none'}); editing an existing type isn't supported.")
+        raise AnkiError(f"Note type '{name}' already exists. Pick another name (similar existing: {_similar_decks(name, set(existing)) or 'none'}); to change an existing type's look, use restyle_note_type.")
     allowed = set(fields) | _SPECIAL_REFS
     plan = []
     for t in tpls:

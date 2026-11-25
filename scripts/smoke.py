@@ -45,12 +45,12 @@ async def main():
         check("move_cards dry run moves nothing and counts cards already there", mv["dry_run"] and mv["would_move"] == 0 and mv["already_in_target"] > 0, f"{mv['already_in_target']} already there")
         no_yanki = await s.call_tool("move_cards", {"query": "deck:Default", "target_deck": "Go"})
         check("move_cards refuses a Yanki target", no_yanki.is_error and "Yanki" in no_yanki.content[0].text)
-        cv = items(await s.call_tool("convert_notes", {"query": '"deck:Languages::English" note:Cloze', "target_note_type": "Basic",
-                                                        "field_map": {"Front": "Text", "Back": "Back Extra"}, "limit": 2}))[0]
+        cv = items(await s.call_tool("convert_notes", {"query": '"deck:System Design::Estimation Numbers" note:Basic', "target_note_type": "Basic (and reversed card)",
+                                                        "field_map": {"Front": "Front", "Back": "Back"}, "limit": 2}))[0]
         check("convert_notes dry run plans without converting or backing up", cv["dry_run"] and cv["notes"] == 2 and "backups" not in cv and cv["decks_to_back_up"], str(cv["decks_to_back_up"]))
         refused = await s.call_tool("convert_notes", {"query": '"deck:Go"', "target_note_type": "Basic", "field_map": {"Front": "Front"}})
         check("convert_notes refuses Yanki notes", refused.is_error and "Yanki" in refused.content[0].text)
-        nt = items(await s.call_tool("create_note_type", {"definition_file": str(Path(__file__).resolve().parent.parent / "examples" / "note_types" / "english-vocab.json")}))[0]
+        nt = items(await s.call_tool("create_note_type", {"definition_file": str(Path(__file__).resolve().parent.parent / "examples" / "note_types" / "english-vocab.json"), "name": "Smoke English Vocab"}))[0]
         check("create_note_type dry run validates the shipped English Vocab design", nt["dry_run"] and [t["name"] for t in nt["templates"]] == ["Recognition", "Recall"], nt["name"])
         dup = await s.call_tool("create_note_type", {"name": "Basic", "fields": ["A"], "templates": [{"name": "c", "front": "{{A}}", "back": "{{A}}"}]})
         check("create_note_type refuses an existing name", dup.is_error and "already exists" in dup.content[0].text)
@@ -85,7 +85,7 @@ async def main():
 
         sim = await s.call_tool("find_similar_notes", {"text": "to avoid", "limit": 3})
         if sim.is_error:  # the semantic index is optional: then the error must say how to set it up
-            check("find_similar_notes explains a missing index", "anki-mcp-index" in sim.content[0].text or "rag" in sim.content[0].text, sim.content[0].text[:80])
+            check("find_similar_notes explains a missing index", any(fix in sim.content[0].text for fix in ("anki-mcp-index", "rag", "docker start")), sim.content[0].text[:80])
         else:
             top = items(sim)[0]["results"]
             check("find_similar_notes finds 'evitar' for 'to avoid'", any("evitar" in r["text"] for r in top), top[0]["text"][:50] if top else "-")
