@@ -11,6 +11,7 @@ from anki_mcp import rag
 
 class FakeEmbedder:
     model_name = "fake-model"
+    dims: dict[str, int] = {}  # shared, so the same text gets the same vector in every instance; distinct texts never collide
 
     def __init__(self):
         self.embedded: list[str] = []
@@ -19,7 +20,7 @@ class FakeEmbedder:
         self.embedded += texts
         out = np.zeros((len(texts), rag.DIM), dtype=np.float32)
         for i, t in enumerate(texts):
-            out[i, hash(t) % rag.DIM] = 1.0
+            out[i, self.dims.setdefault(t, len(self.dims) % rag.DIM)] = 1.0
         return out
 
 
@@ -266,7 +267,8 @@ class MeaningEmbedder(FakeEmbedder):
     def embed(self, texts):
         out = np.zeros((len(texts), rag.DIM), dtype=np.float32)
         for i, t in enumerate(texts):
-            out[i, hash(t.split(" | ")[1]) % rag.DIM] = 1.0
+            m = t.split(" | ")[1]
+            out[i, self.dims.setdefault(m, len(self.dims) % rag.DIM)] = 1.0
         return out
 
 
