@@ -33,6 +33,11 @@ class DeckProfile(BaseModel):
         default="all",
         description="Where add_notes looks for near-duplicates: 'all' (whole collection, default) or 'deck' (only this deck and its subdecks).",
     )
+    semantic_index: bool = Field(
+        default=True,
+        description="False keeps this deck's notes out of the semantic index (find_similar_notes and add_notes' meaning check), "
+        "e.g. alphabet or script-reading cards whose text has no meaning to search by. The exact same-word check still runs.",
+    )
     conventions: list[str] = Field(
         default_factory=list, description="Free-form rules, e.g. 'Tag duolingo if the sentence comes from Duolingo.'"
     )

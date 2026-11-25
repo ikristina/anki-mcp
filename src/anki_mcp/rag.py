@@ -30,6 +30,9 @@ KEY_PREFIX = "anki:note:"
 META_KEY = "anki:index:meta"
 _BUILD_HINT = "Build or refresh the index with `uv run --extra rag anki-mcp-index` (Anki must be running)."
 SIMILAR_THRESHOLD = 0.8  # starting value: a paraphrase-level match on MiniLM; related-but-different notes sit at 0.5-0.75
+# Exact search. HNSW (approximate) with Redis's default EF_RUNTIME of 10 got stuck in the 441 Georgian notes and missed
+# 'evitar' for "to avoid" (similarity 0.80 vs 0.54); brute force over ~10k x 384 floats takes milliseconds.
+ALGORITHM = "FLAT"
 TEXT_CHARS = 600  # the model reads ~128 tokens anyway; this bounds what is stored in Redis
 
 _SOUND_RE = re.compile(r"\[sound:[^\]]*\]")
@@ -166,10 +169,14 @@ class RedisStore:
             log.warning("embedding model changed (%s -> %s): rebuilding the index", meta.get("model"), model)
             self.clear()
             rebuilt = True
+        elif self._index_exists() and meta.get("algorithm") != ALGORITHM:
+            # Only the index definition changes: the note hashes (vectors) stay, and Redis re-indexes them.
+            log.warning("switching the vector index to %s (no re-embedding)", ALGORITHM)
+            self.r.ft(self.index).dropindex(delete_documents=False)
         if not self._index_exists():
             self.r.ft(self.index).create_index(
                 [
-                    VectorField("vector", "HNSW", {"TYPE": "FLOAT32", "DIM": dim, "DISTANCE_METRIC": "COSINE"}),
+                    VectorField("vector", ALGORITHM, {"TYPE": "FLOAT32", "DIM": dim, "DISTANCE_METRIC": "COSINE"}),
                     TextField("text"),
                     TagField("deck", separator="|"),
                     TagField("note_type", separator="|"),
@@ -178,9 +185,9 @@ class RedisStore:
                 definition=IndexDefinition(prefix=[self.prefix], index_type=IndexType.HASH),
             )
             rebuilt = True
-        if not meta or rebuilt:
+        if not meta or rebuilt or meta.get("algorithm") != ALGORITHM:
             # Record the model now, not only at the end: a run interrupted midway must resume, not look like a model change.
-            self.r.hset(self.meta_key, mapping={"model": model, "dim": dim})
+            self.r.hset(self.meta_key, mapping={"model": model, "dim": dim, "algorithm": ALGORITHM})
         return rebuilt
 
     def mods(self) -> dict[int, int]:
@@ -292,7 +299,13 @@ def sync_index(
         if full:
             store.clear()
         store.ensure_index(embedder.model_name, DIM)
+        from anki_mcp import profiles
+        from anki_mcp.server import _deck_term
+
         ids = call("findNotes", query="")
+        # Decks whose profile says semantic_index=False: never embedded, and removed if they were (they count as gone).
+        skip = {i for d, p in profiles.load().items() if not p.semantic_index for i in call("findNotes", query=_deck_term(d))}
+        ids = [i for i in ids if i not in skip]
         current = {m["noteId"]: m["mod"] for m in call("notesModTime", notes=ids)} if ids else {}
         known = store.mods()
         gone = [i for i in known if i not in current]

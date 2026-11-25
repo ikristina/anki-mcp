@@ -117,7 +117,7 @@ In MCP the server does **retrieval only**. The agent is the generator, so no LLM
 **Redis layout:**
 - Key: `anki:note:<note_id>`.
 - Hash fields: `vector` (FLOAT32 bytes), `text`, `deck` (TAG), `note_type` (TAG), `mod` (NUMERIC, note modified time).
-- Index: `idx:anki_notes`, HNSW, cosine distance, plus TEXT on `text` for hybrid.
+- Index: `idx:anki_notes`, FLAT (exact; HNSW was replaced after it missed obvious matches, see LEARNINGS.md), cosine distance, plus TEXT on `text` for hybrid.
 - Key `anki:index:meta`: embedding model name, dimension, and last indexed time. **If the model changes, rebuild**: vectors from different models aren't comparable.
 
 **Status (2026-11-23): 8.1-8.4 done. Next: 8.5 (hybrid search), only if an eval shows it beats the parts.** Model: paraphrase-multilingual-MiniLM-L12-v2. Redis 8 runs in Docker (`anki-redis`, volume `anki-redis-data`, AOF + RDB). Indexer: `anki-mcp-index` (`src/anki_mcp/rag.py`). Eval script: `scripts/rag_eval.py`.

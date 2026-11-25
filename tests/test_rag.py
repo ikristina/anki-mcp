@@ -312,3 +312,16 @@ def test_similar_scope_deck_ignores_other_decks(anki, tmp_path, monkeypatch):
     assert "similar" in other()["results"][0]  # default scope 'all' sees the same word in another deck
     profiles.save({"Default": profiles.DeckProfile(similar_scope="deck")})
     assert "similar" not in other()["results"][0]
+
+
+def test_decks_with_semantic_index_off_are_left_out_and_removed(anki):
+    from anki_mcp import profiles
+
+    store, emb = MemoryStore(), FakeEmbedder()
+    run(anki, store, emb)
+    latin = {i for i, n in anki.notes.items() if n["deck"] == "Languages::Latin"}
+    assert latin <= set(store.items)
+    profiles.save({"Languages::Latin": profiles.DeckProfile(semantic_index=False)})
+    res = run(anki, store, emb)
+    assert res["removed"] == len(latin) and not latin & set(store.items)
+    assert run(anki, store, emb)["indexed"] == 0  # stays out, and isn't re-embedded on later runs

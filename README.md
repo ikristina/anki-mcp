@@ -152,6 +152,8 @@ uv run --extra rag anki-mcp-index      # Anki must be running; first run embeds 
 - A card moved to another deck keeps its old deck in the index until the next `--full` run (Anki doesn't bump a note's modified time on a move).
 - `add_notes` also uses it: each valid note gets a `similar` list when an existing note has the same word (checked with Anki's own search, no index needed) or a similar meaning (similarity ≥ 0.8, from the index). Without the index, `add_notes` still does the same-word check and says `similar_check: semantic check skipped`.
 - To use the tools from an agent, register the server with the extra: `claude mcp add anki --scope user -- uv --directory /absolute/path/to/anki-mcp run --extra rag anki-mcp`. Re-run `anki-mcp-index` now and then (it takes seconds when little changed): notes added since the last run aren't found yet, and `find_similar_notes` reports `indexed_at`.
+- After a reboot, `colima start` (or start Docker) and the container comes back on its own (`--restart unless-stopped`). If `docker start anki-redis` says *No such container*, the container was removed (a `docker system prune`, or a reset colima VM; its volume usually goes too): run the `docker run` above again, then `uv run --extra rag anki-mcp-index`, a full rebuild that took about 2 minutes for 10.6k notes.
+- A deck whose cards have no meaning to search by (an alphabet deck) can be left out with the deck profile option `semantic_index: false`; the next `anki-mcp-index` run removes it.
 - `ANKI_MCP_REDIS_URL` points at a different Redis. If Redis is down, only these commands fail, with a message saying how to start it.
 - How the model was chosen: `uv run --extra rag python scripts/rag_eval.py build` then `score` (recall@5 and MRR on query sets derived from your own collection; results stay in the gitignored `evals/retrieval/`). Plan: [ROADMAP.md](ROADMAP.md), Phase 8.
 
@@ -164,6 +166,8 @@ docker run -d --name otel-lgtm -p 3000:3000 -p 4318:4318 grafana/otel-lgtm
 claude mcp add anki --scope user -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
   -- uv --directory /absolute/path/to/anki-mcp run --extra otel anki-mcp
 ```
+
+The container has no volume, so telemetry is lost when it's removed. If `docker start otel-lgtm` says *No such container*, run the `docker run` above again.
 
 To fill Grafana with data without using an agent, generate traffic. The script starts its own server with exporting on and makes random read-only calls, dry-run writes and a few deliberate mistakes. It never writes to the collection:
 

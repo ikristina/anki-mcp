@@ -25,7 +25,7 @@ Last updated: 2026-11-25 (`restyle_note_type`, `deck_options`, images, `full_syn
 | "Delete these notes" | Only for ids you approved, dry run first | `delete_notes` |
 | "Sync" | Normal sync with AnkiWeb (never a full one) | `sync` |
 | "What does deck X look like?" | Note types, fields, audio, tag patterns, samples | `describe_deck`, `list_note_types` |
-| "Remember how this deck works" | Saves conventions (voice, field rules, tags, and whether duplicate checks look at the whole collection or only that deck: `similar_scope`) for next time | `set_deck_profile` |
+| "Remember how this deck works" | Saves conventions (voice, field rules, tags, whether duplicate checks look at the whole collection or only that deck: `similar_scope`, and whether the deck is in the semantic index at all: `semantic_index`) for next time | `set_deck_profile` |
 
 Safety defaults: tools that change note types report `full_sync_pending` (read from the collection file), and `sync` refuses while one is pending. Writes are dry runs first, everything added is tagged `mcp-added` (edited: `mcp-edited`, converted: `mcp-converted`), decks synced from Obsidian (Yanki) are never written to.
 
@@ -69,6 +69,6 @@ Pick these when asking for a new deck. Each one maps to note type fields and car
 - Saved deck conventions: `~/.config/anki-mcp/profiles.json`
 - Old note type looks: `~/.config/anki-mcp/backups/<type>-look-<time>.json`
 - Backups before conversions: `~/.config/anki-mcp/backups/` (`ANKI_MCP_BACKUP_DIR`), log in `convert_history.jsonl`
-- Semantic index: Redis container `anki-redis` (needs `colima start` after a reboot), rebuilt with `uv run --extra rag anki-mcp-index`
+- Semantic index: Redis container `anki-redis` (needs `colima start` after a reboot), rebuilt with `uv run --extra rag anki-mcp-index`; if the container itself is gone, see the README's semantic search section
 - Observability: Grafana container `otel-lgtm` (http://localhost:3000)
 - Design notes and gotchas: `LEARNINGS.md`; plan: `ROADMAP.md`
