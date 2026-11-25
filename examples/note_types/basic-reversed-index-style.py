@@ -8,10 +8,10 @@ snd='{{#Audio}}<div class="snd">{{Audio}}</div>{{/Audio}}'
 T={
  "Card 1":{
   "Front":'<div class="tag">{{Subdeck}}</div>\n<div class="es">{{Front}}</div>\n'+snd,
-  "Back":'<div class="tag">{{Subdeck}}</div>\n<div class="es ref">{{Front}}</div>\n<hr id="answer">\n<div class="en ans">{{Back}}</div>\n'+snd},
+  "Back":'<div class="tag">{{Subdeck}}</div>\n<div class="es">{{Front}}</div>\n'+snd+'\n<hr id="answer">\n<div class="en ans">{{Back}}</div>'},
  "Card 2":{
   "Front":'<div class="tag">{{Subdeck}}</div>\n<div class="en ans">{{Back}}</div>',
-  "Back":'<div class="tag">{{Subdeck}}</div>\n<div class="en ref">{{Back}}</div>\n<hr id="answer">\n<div class="es">{{Front}}</div>\n'+snd}}
+  "Back":'<div class="tag">{{Subdeck}}</div>\n<div class="en ans">{{Back}}</div>\n<hr id="answer">\n<div class="es">{{Front}}</div>\n'+snd}}
 CSS="""/* Index look: white card, one red dot, light type. Spanish medium weight, English lighter. */
 html, body { margin: 0; padding: 0; }
 *, *::before, *::after { box-sizing: border-box; }
@@ -21,8 +21,6 @@ html, body { margin: 0; padding: 0; }
 .es { font-weight: 500; font-size: 1.3em; line-height: 1.3; letter-spacing: -.01em; }
 .en { font-weight: 400; font-size: 1.15em; color: #6a6d72; }
 .en.ans { color: #17181a; }
-.ref { font-size: .95em; }
-.es.ref { color: #8a8d92; }
 hr#answer { border: 0; border-top: 1px solid #17181a; width: 28px; margin: 18px 0; }
 .snd { margin-top: 16px; }
 .replay-button svg { width: 30px; height: 30px; }
@@ -32,7 +30,6 @@ hr#answer { border: 0; border-top: 1px solid #17181a; width: 28px; margin: 18px 
 .nightMode .tag, .night_mode .tag { color: #8f949c; }
 .nightMode .en, .night_mode .en { color: #9ba0a8; }
 .nightMode .en.ans, .night_mode .en.ans { color: #ececee; }
-.nightMode .es.ref, .night_mode .es.ref { color: #8f949c; }
 .nightMode hr#answer, .night_mode hr#answer { border-top-color: #ececee; }
 """
 ac("updateModelTemplates",model={"name":M,"templates":T})
