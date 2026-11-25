@@ -2,7 +2,7 @@
 
 A plain-language map of what this server lets an agent do with your Anki collection, what it can't do yet, and what the design vocabulary means. **Whoever adds a capability updates this file in the same change.** Tool details are in the README table; this page is for "what's possible?".
 
-Last updated: 2026-11-23 (deck profile option `similar_scope`).
+Last updated: 2026-11-25 (Index restyle: subdeck tag, phone fit).
 
 ## Things you can say
 
@@ -32,7 +32,7 @@ Safety defaults: writes are dry runs first, everything added is tagged `mcp-adde
 
 ## Restyling an existing note type
 
-The look of an existing type (CSS and template layout) can be changed without a full sync, but it applies to every deck that uses the type. There is no tool yet; it was done once with a script (`examples/note_types/basic-reversed-index-style.py`) after saving the old version to `~/.config/anki-mcp/backups/`. Pimsleur 1 and 2, SpanishRandom and Latin now use the Index look.
+The look of an existing type (CSS and template layout) can be changed without a full sync, but it applies to every deck that uses the type. There is no tool yet; it was done once with a script (`examples/note_types/basic-reversed-index-style.py`) after saving the old version to `~/.config/anki-mcp/backups/`. Pimsleur 1 and 2, SpanishRandom and Latin now use the Index look. Each card shows its subdeck name (`{{Subdeck}}`) in the tag line instead of "Card · Front". Run `sync` right after a restyle, or the phone won't see it.
 
 ## Not possible yet
 

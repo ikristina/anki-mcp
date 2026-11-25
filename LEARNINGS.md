@@ -237,3 +237,8 @@ What building the suite taught (details and numbers in `docs/evals.md`):
 
 ## Duplicate check scope (2026-11-23)
 `add_notes` warned about near-duplicates across the whole collection, which is noise for a catch-all deck like SpanishRandom. Deck profiles now have `similar_scope` (`all` default, `deck` = only that deck and subdecks). It filters both the lexical (`"deck:X" "nc:word"`) and the semantic (`find_similar(deck=...)`) check.
+
+## Index restyle on phones (2026-11-24)
+- AnkiDroid showed horizontal and vertical scrolling and a card sitting too low. Fixes in the CSS: `*{box-sizing:border-box}` (the `min-height:100vh` plus padding otherwise overflows), zero `html, body` margin, `overflow-wrap:anywhere`, smaller paddings and gaps. If AnkiDroid still centres vertically, that is its own reviewing setting; CSS can't override it.
+- `{{Subdeck}}` gives the last part of the deck name (`{{Deck}}` the full path), so one shared note type can show each deck's name in the tag line.
+- A restyle only reaches the phone after desktop sync and then phone sync. Run `sync` right after the script; AnkiDroid may need the reviewer reopened.

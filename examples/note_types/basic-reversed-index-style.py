@@ -7,14 +7,16 @@ M="Basic (and reversed card)"
 snd='{{#Audio}}<div class="snd">{{Audio}}</div>{{/Audio}}'
 T={
  "Card 1":{
-  "Front":'<div class="tag">Card 1 · Front</div>\n<div class="es">{{Front}}</div>\n'+snd,
-  "Back":'<div class="tag">Card 1 · Back</div>\n<div class="es ref">{{Front}}</div>\n<hr id="answer">\n<div class="en ans">{{Back}}</div>\n'+snd},
+  "Front":'<div class="tag">{{Subdeck}}</div>\n<div class="es">{{Front}}</div>\n'+snd,
+  "Back":'<div class="tag">{{Subdeck}}</div>\n<div class="es ref">{{Front}}</div>\n<hr id="answer">\n<div class="en ans">{{Back}}</div>\n'+snd},
  "Card 2":{
-  "Front":'<div class="tag">Card 2 · Front</div>\n<div class="en ans">{{Back}}</div>',
-  "Back":'<div class="tag">Card 2 · Back</div>\n<div class="en ref">{{Back}}</div>\n<hr id="answer">\n<div class="es">{{Front}}</div>\n'+snd}}
+  "Front":'<div class="tag">{{Subdeck}}</div>\n<div class="en ans">{{Back}}</div>',
+  "Back":'<div class="tag">{{Subdeck}}</div>\n<div class="en ref">{{Back}}</div>\n<hr id="answer">\n<div class="es">{{Front}}</div>\n'+snd}}
 CSS="""/* Index look: white card, one red dot, light type. Spanish medium weight, English lighter. */
-.card { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; font-size: 20px; line-height: 1.3; text-align: left; color: #17181a; background: #ffffff; max-width: 34rem; margin: 0 auto; padding: 22px 24px; }
-.tag { color: #8a8d92; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; margin-bottom: 32px; }
+html, body { margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; }
+.card { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; font-size: 20px; line-height: 1.3; text-align: left; color: #17181a; background: #ffffff; max-width: 34rem; min-height: 100vh; margin: 0 auto; padding: 14px 20px 24px; overflow-wrap: anywhere; word-break: normal; }
+.tag { color: #8a8d92; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; margin-bottom: 20px; }
 .tag::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #e0261b; }
 .es { font-weight: 500; font-size: 1.3em; line-height: 1.3; letter-spacing: -.01em; }
 .en { font-weight: 400; font-size: 1.15em; color: #6a6d72; }
@@ -22,7 +24,7 @@ CSS="""/* Index look: white card, one red dot, light type. Spanish medium weight
 .ref { font-size: .95em; }
 .es.ref { color: #8a8d92; }
 hr#answer { border: 0; border-top: 1px solid #17181a; width: 28px; margin: 18px 0; }
-.snd { margin-top: 22px; }
+.snd { margin-top: 16px; }
 .replay-button svg { width: 30px; height: 30px; }
 .replay-button svg circle { fill: #e0261b; stroke: #e0261b; }
 .replay-button svg path { fill: #ffffff; stroke: #ffffff; }
