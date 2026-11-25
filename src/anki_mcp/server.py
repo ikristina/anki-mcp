@@ -7,16 +7,21 @@ Design rules (see LEARNINGS.md):
 """
 
 import base64
+import copy
 import difflib
+import hashlib
 import html
 import json
 import os
 import re
+import shutil
+import sqlite3
+import tempfile
 import zipfile
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
@@ -414,12 +419,14 @@ def list_note_types(
         str | None,
         Field(description="Case-insensitive substring of the note type name, e.g. 'memrise'. Omit to list all."),
     ] = None,
+    full: Annotated[bool, Field(description="Also return the CSS and each card template's HTML (only when at most 5 types match), e.g. before restyle_note_type.")] = False,
 ) -> list[dict]:
     """List the collection's note types (models) with their fields in order and how many notes use each.
 
     Use it to pick a note type for add_notes or set_deck_profile when a deck is empty or you need a type the deck
     doesn't use yet, e.g. one just imported with a shared deck. When at most 5 types match, each also shows which
-    fields its card templates put on the front/back. To see how a deck actually fills the fields, use describe_deck.
+    fields its card templates put on the front/back (full=True: the CSS and template HTML too). To see how a deck
+    actually fills the fields, use describe_deck.
     """
     names = sorted(invoke("modelNames"), key=str.lower)
     if name:
@@ -428,6 +435,8 @@ def list_note_types(
             close = difflib.get_close_matches(name, names, n=5, cutoff=0.5)
             raise AnkiError(f"No note type matches '{name}'. Similar: {close or 'none'}. Omit name to list all.")
         names = matches
+    if full and len(names) > MAX_TEMPLATE_DETAIL:
+        raise AnkiError(f"full=True needs at most {MAX_TEMPLATE_DETAIL} matching note types, {len(names)} match. Pass a more specific name.")
     result = []
     for n in names:
         escaped = re.sub(r'([\\"*_])', r"\\\1", n)
@@ -436,6 +445,9 @@ def list_note_types(
         if len(names) <= MAX_TEMPLATE_DETAIL:
             templates = invoke("modelFieldsOnTemplates", modelName=n)
             entry["templates"] = {t: {"front": sides[0], "back": sides[1]} for t, sides in templates.items()}
+        if full:
+            entry["css"] = invoke("modelStyling", modelName=n)["css"]
+            entry["template_html"] = {t: {"front": s["Front"], "back": s["Back"]} for t, s in invoke("modelTemplates", modelName=n).items()}
         result.append(entry)
     return result
 
@@ -479,6 +491,7 @@ class NoteInput(_AgentInput):
     tags: list[str] = Field(default_factory=list, description="Tags without spaces, e.g. ['leetcode', 'heap']. Omit them "
                             "to use the deck profile's tags; given tags replace the profile's.")
     audio: "AudioSpec | None" = Field(default=None, description="Generate pronunciation audio (free Google Translate voice).")
+    image: "ImageSpec | None" = Field(default=None, description="Attach a local image file to a field, e.g. {'field': 'Image', 'path': '/Users/me/Downloads/cat.jpg'}.")
 
 
 class AudioSpec(_AgentInput):
@@ -493,6 +506,29 @@ class AudioSpec(_AgentInput):
         description="Plain text to speak. Default: the note type's first field. There is no 'text_field' key: when the "
         "deck profile's audio.text_field isn't the first field, pass that field's plain text here.",
     )
+
+
+class ImageSpec(_AgentInput):
+    field: str = Field(description="Field that receives the <img> tag, e.g. 'Image'.")
+    path: str = Field(description="Absolute path of a local image file (.png .jpg .jpeg .gif .webp, at most 10 MB). "
+                      "For a web image, download it to a file first.")
+
+
+IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+MAX_IMAGE_BYTES = 10_000_000
+
+
+def _read_image(spec: ImageSpec) -> tuple[str, bytes]:
+    """Validate a local image and name it by its content, so adding the same picture twice stores one file."""
+    p = Path(spec.path).expanduser()
+    if not p.is_absolute() or p.suffix.lower() not in IMAGE_TYPES:
+        raise AnkiError(f"Image {spec.path!r} must be an absolute path to a {'/'.join(sorted(IMAGE_TYPES))} file.")
+    if not p.is_file():
+        raise AnkiError(f"Image {spec.path!r} does not exist. Check the path (download web images to a file first).")
+    if (size := p.stat().st_size) > MAX_IMAGE_BYTES:
+        raise AnkiError(f"Image {spec.path!r} is {size // 1_000_000} MB; the limit is 10 MB. Resize it first.")
+    data = p.read_bytes()
+    return f"anki-mcp-{hashlib.sha256(data).hexdigest()[:12]}{p.suffix.lower()}", data
 
 
 NoteInput.model_rebuild()
@@ -591,7 +627,7 @@ def add_notes(
     Each note is validated first (deck exists, note type exists, field names match, not a duplicate
     of an existing first field in the same deck). Invalid notes are reported and skipped;
     valid ones are still added. Prefer one batched call over many single-note calls.
-    Set `audio` on a note to generate pronunciation (needs internet; skipped in dry_run).
+    Set `audio` on a note to generate pronunciation (needs internet; skipped in dry_run), `image` to attach a local picture.
     Unknown keys in a note or its audio (e.g. 'text_field', 'notetype') are rejected, not ignored.
     An omitted note_type comes from the deck profile (else 'Basic'); one that differs from the profile's gets a warning.
     Omitted tags come from the deck profile too.
@@ -609,6 +645,7 @@ def add_notes(
     candidates: list[tuple[int, dict]] = []
     similar: dict[int, list[dict]] = {}
     similar_skipped: str | None = None
+    images: dict[int, tuple[str, bytes]] = {}
     notices = _resolve_note_types(notes)
 
     for i, note in enumerate(notes):
@@ -650,6 +687,15 @@ def add_notes(
         if note.audio and not (note.audio.text or _plain(note.fields.get(expected[0], ""), None)):
             results[i] = {"index": i, "status": "error", "error": f"No text to speak: set audio.text or fill '{expected[0]}'."}
             continue
+        if note.image:
+            if note.image.field not in expected:
+                results[i] = {"index": i, "status": "error", "error": f"Image field '{note.image.field}' not in '{note.note_type}'. Valid fields: {expected}."}
+                continue
+            try:
+                images[i] = _read_image(note.image)
+            except AnkiError as e:
+                results[i] = {"index": i, "status": "error", "error": str(e)}
+                continue
         candidates.append(
             (
                 i,
@@ -677,6 +723,10 @@ def add_notes(
             for i, _ in addable:
                 results[i] = {"index": i, "status": "valid"}
         elif addable := _attach_audio(addable, notes, field_cache, results):
+            for i, payload in addable:  # AnkiConnect stores the file and appends <img src> to the field
+                if i in images:
+                    name, data = images[i]
+                    payload["picture"] = [{"data": base64.b64encode(data).decode(), "filename": name, "fields": [notes[i].image.field]}]
             ids = invoke("addNotes", notes=[p for _, p in addable])
             for (i, _), nid in zip(addable, ids):
                 results[i] = {"index": i, "status": "added", "note_id": nid} if nid else {"index": i, "status": "error", "error": "Anki rejected the note."}
@@ -809,6 +859,7 @@ class NoteUpdate(BaseModel):
         "listed change; to edit part of a field, copy its raw value and change just that part.",
     )
     add_tags: list[str] = Field(default_factory=list, description="Tags to add (existing tags are kept).")
+    image: ImageSpec | None = Field(default=None, description="Append a local image to a field, e.g. {'field': 'Image', 'path': '/Users/me/cat.jpg'}. Skipped if the field already shows that exact picture.")
 
 
 @mcp.tool(annotations=ToolAnnotations(destructive_hint=True, idempotent_hint=True, open_world_hint=False))
@@ -822,6 +873,7 @@ def update_notes(
     Yanki notes (Obsidian would overwrite them), unknown fields, and edits that would remove a [sound:] tag
     (audio is only added, via add_audio). Changed notes get the tag 'mcp-edited'. Review history is untouched.
     Dry run by default: show the user the old -> new diff, then call again with dry_run=False.
+    `image` appends a local picture to a field (stored in Anki's media folder on the real run).
     """
     found = {n["noteId"]: n for n in invoke("notesInfo", notes=[u.note_id for u in updates]) if n.get("noteId")}
     results, apply = [], []
@@ -834,12 +886,24 @@ def update_notes(
             results.append({"note_id": u.note_id, "status": "error", "error": "Yanki note: edit its markdown in the "
                             "Obsidian vault instead, or the next Yanki sync overwrites the change."})
             continue
-        unknown = sorted(set(u.fields) - set(n["fields"]))
+        unknown = sorted((set(u.fields) | ({u.image.field} if u.image else set())) - set(n["fields"]))
         if unknown:
             results.append({"note_id": u.note_id, "status": "error",
                             "error": f"Unknown fields {unknown} for '{n['modelName']}'. Valid fields: {list(n['fields'])}."})
             continue
         new = {f: _to_html(v) for f, v in u.fields.items() if _to_html(v) != n["fields"][f]["value"]}
+        image = None
+        if u.image:
+            try:
+                image = _read_image(u.image)
+            except AnkiError as e:
+                results.append({"note_id": u.note_id, "status": "error", "error": str(e)})
+                continue
+            base = new.get(u.image.field, n["fields"][u.image.field]["value"])
+            if (img := f'<img src="{image[0]}">') in base:
+                image = None
+            else:
+                new[u.image.field] = base + img
         lost = [f for f, v in new.items() if set(_SOUND_RE.findall(n["fields"][f]["value"])) - set(_SOUND_RE.findall(v))]
         if lost:
             results.append({"note_id": u.note_id, "status": "error", "error": f"Would remove audio from {lost}. "
@@ -854,10 +918,12 @@ def update_notes(
         if tags:
             entry["add_tags"] = tags
         results.append(entry)
-        apply.append((u.note_id, new, tags))
+        apply.append((u.note_id, new, tags, image))
 
     if not dry_run:
-        for nid, new, tags in apply:
+        for nid, new, tags, image in apply:
+            if image:
+                invoke("storeMediaFile", filename=image[0], data=base64.b64encode(image[1]).decode())
             if new:
                 invoke("updateNoteFields", note={"id": nid, "fields": new})
             invoke("addTags", notes=[nid], tags=" ".join([*tags, EDITED_TAG]))
@@ -912,6 +978,33 @@ _FULL_SYNC_REASONS = {
     3: "this computer's collection is empty, so it would download everything from AnkiWeb",
     4: "AnkiWeb is empty, so this computer would upload everything",
 }
+
+
+def _collection_file() -> Path:
+    if env := os.environ.get("ANKI_MCP_COLLECTION"):
+        return Path(env).expanduser()
+    return Path.home() / "Library" / "Application Support" / "Anki2" / invoke("getActiveProfile") / "collection.anki2"
+
+
+def _full_sync_pending() -> bool | None:
+    """True when the schema changed since the last sync (col.scm > col.ls), so Anki's next sync must be a one-way full
+    sync. AnkiConnect doesn't expose this, so it is read from a copy of the collection file (with its -wal, or the copy
+    looks stale). None when it can't be read (another OS, another profile layout)."""
+    try:
+        src = _collection_file()
+        with tempfile.TemporaryDirectory() as tmp:
+            for suffix in ("", "-wal"):
+                if Path(f"{src}{suffix}").exists():
+                    shutil.copy2(f"{src}{suffix}", f"{tmp}/c.anki2{suffix}")
+            con = sqlite3.connect(f"{tmp}/c.anki2")
+            try:
+                scm, ls = con.execute("select scm, ls from col").fetchone()
+            finally:
+                con.close()
+        return scm > ls
+    except Exception as e:  # optional signal: never let it break a tool
+        log.info("full_sync_pending unknown (%s)", str(e)[:100])
+        return None
 
 
 MAX_MOVE = 200
@@ -1142,6 +1235,7 @@ def convert_notes(
     log.info("converted %d notes %s -> %s (%d failed)", len(converted), source, target_note_type, len(failed))
     out.update({"converted": len(converted), "failed": failed, "backups": backups, "history": str(history)})
     out["next"] = _FULL_SYNC_STEPS if converted else "Nothing was converted."
+    out["full_sync_pending"] = _full_sync_pending()
     if failed:
         out["next"] = f"Stopped at the first error ({failed[0]['error']}). {len(converted)} notes were converted. " + out["next"]
     return out
@@ -1221,7 +1315,103 @@ def create_note_type(
     invoke("createModel", modelName=name, inOrderFields=fields,
            cardTemplates=[{"Name": t["name"], "Front": t["front"], "Back": t["back"]} for t in tpls], css=css, isCloze=False)
     log.info("created note type %s (%d fields, %d templates)", name, len(fields), len(tpls))
-    out.update({"created": name, "next": "Created. " + _FULL_SYNC_STEPS.replace("Changing a note type is", "Adding a note type is probably")})
+    out.update({"created": name, "next": "Created. " + _FULL_SYNC_STEPS.replace("Changing a note type is", "Adding a note type is probably"),
+                "full_sync_pending": _full_sync_pending()})
+    return out
+
+
+class LookEdit(_AgentInput):
+    card: str | None = Field(default=None, description="Card template name, e.g. 'Card 1' or 'Recall'. Omit to edit the CSS.")
+    side: Literal["front", "back"] | None = Field(default=None, description="Template side; required with card.")
+    new: str = Field(description="Replacement text. Without `old`, the whole CSS (or template side) becomes this.")
+    old: str | None = Field(default=None, description="Exact current text to replace; it must occur exactly once. Omit to replace everything.")
+
+
+LOOK_DIFF_CHARS = 1500
+
+
+def _apply_edit(text: str, e: LookEdit, label: str) -> str:
+    if e.old is None:
+        return e.new
+    if (n := text.count(e.old)) != 1:
+        raise AnkiError(f"{label}: `old` occurs {n} times, it must occur exactly once. Copy it from list_note_types(name, "
+                        "full=True), with enough surrounding text to be unique.")
+    return text.replace(e.old, e.new)
+
+
+def _diff(old: str, new: str) -> str:
+    return "\n".join(list(difflib.unified_diff(old.splitlines(), new.splitlines(), lineterm="", n=1))[2:])[:LOOK_DIFF_CHARS]
+
+
+@mcp.tool(annotations=ToolAnnotations(destructive_hint=True, idempotent_hint=True, open_world_hint=False))
+def restyle_note_type(
+    note_type: Annotated[str, Field(description="Exact name of an existing note type (list_note_types).")],
+    edits: Annotated[list[LookEdit], Field(min_length=1, max_length=20)],
+    dry_run: Annotated[bool, Field(description="Default True: check the edits and show the diff. Set False to write.")] = True,
+) -> dict:
+    """Change how an EXISTING note type's cards look: its CSS and the HTML of its card templates (front/back).
+
+    Read the current text first with list_note_types(name, full=True). Each edit replaces its exact `old` text (it must
+    occur once) or, without `old`, the whole CSS or template side. Every edit is checked before anything is written:
+    new {{placeholders}} must be fields of the type, and a front that showed a field must still show one.
+    Not a schema change: normal sync, notes and review history untouched. It can't add, remove or rename cards or
+    fields. The look belongs to the note type, so it changes every deck using it: `decks` lists them, tell the user.
+    Dry run by default: show the user the diff, then call again with dry_run=False. The old CSS and templates are
+    saved to `backup` first; to undo, restyle again with the backup's text. Yanki note types are refused.
+    """
+    if note_type.startswith("Yanki"):
+        raise AnkiError("Yanki note types belong to the Yanki Obsidian plugin, which can rewrite them. Leave them alone.")
+    names = invoke("modelNames")
+    if note_type not in names:
+        raise AnkiError(f"Note type '{note_type}' does not exist. Similar: {difflib.get_close_matches(note_type, names, n=5, cutoff=0.5) or 'none'}. Use list_note_types.")
+    fields = set(invoke("modelFieldNames", modelName=note_type))
+    old_css = invoke("modelStyling", modelName=note_type)["css"]
+    old_t = invoke("modelTemplates", modelName=note_type)
+    css, tpl = old_css, copy.deepcopy(old_t)
+    for i, e in enumerate(edits):
+        if e.card is None:
+            if e.side:
+                raise AnkiError(f"Edit {i}: side='{e.side}' needs a card name too (cards: {list(tpl)}); omit both to edit the CSS.")
+            css = _apply_edit(css, e, f"Edit {i} (CSS)")
+        elif e.card not in tpl:
+            raise AnkiError(f"Edit {i}: '{note_type}' has no card '{e.card}'. Cards: {list(tpl)}. Adding or renaming cards isn't supported.")
+        elif not e.side:
+            raise AnkiError(f"Edit {i}: set side='front' or 'back' for card '{e.card}'.")
+        else:
+            key = e.side.capitalize()
+            tpl[e.card][key] = _apply_edit(tpl[e.card][key], e, f"Edit {i} ({e.card} {e.side})")
+    allowed = fields | _SPECIAL_REFS
+    for card, sides in tpl.items():
+        for key, text in sides.items():  # only new problems: an existing template may already reference a stale field
+            if unknown := sorted(_template_refs(text) - allowed - _template_refs(old_t[card][key])):
+                raise AnkiError(f"Card '{card}' {key.lower()} would use unknown placeholders {unknown}. Fields: {sorted(fields)} (also {sorted(_SPECIAL_REFS)}).")
+        if _template_refs(old_t[card]["Front"]) & fields and not _template_refs(sides["Front"]) & fields:
+            raise AnkiError(f"Card '{card}' front would show none of the fields, so every such card would be blank.")
+    changed = [card for card in tpl if tpl[card] != old_t[card]]
+    diff = {f"{card} {key.lower()}": _diff(old_t[card][key], tpl[card][key]) for card in changed for key in ("Front", "Back")
+            if tpl[card][key] != old_t[card][key]}
+    if css != old_css:
+        diff["css"] = _diff(old_css, css)
+    if not diff:
+        raise AnkiError("These edits change nothing. Check `old`/`new` against list_note_types(name, full=True).")
+    escaped = re.sub(r'([\\"*_])', r"\\\1", note_type)
+    cards = invoke("findCards", query=f'"note:{escaped}"')
+    decks = {d: len(c) for d, c in invoke("getDecks", cards=cards).items()} if cards else {}
+    out: dict = {"dry_run": dry_run, "note_type": note_type, "diff": diff, "decks": dict(sorted(decks.items(), key=lambda kv: -kv[1]))}
+    if dry_run:
+        out["next"] = "Show the user the diff and the decks it affects, then call again with dry_run=False."
+        return out
+    _backup_root().mkdir(parents=True, exist_ok=True)
+    safe = re.sub(r"[^\w.-]+", "_", note_type)
+    backup = _backup_root() / f"{safe}-look-{datetime.now():%Y%m%d-%H%M%S-%f}.json"
+    backup.write_text(json.dumps({"note_type": note_type, "css": old_css, "templates": old_t}, ensure_ascii=False, indent=1))
+    if changed:
+        invoke("updateModelTemplates", model={"name": note_type, "templates": {c: tpl[c] for c in changed}})
+    if css != old_css:
+        invoke("updateModelStyling", model={"name": note_type, "css": css})
+    log.info("restyled note type %s (%s)", note_type, ", ".join(diff))
+    out.update({"backup": str(backup), "full_sync_pending": _full_sync_pending(),
+                "note": "Restyled. A normal sync carries it to the phone. Reopen a card or preview in Anki to see it."})
     return out
 
 
@@ -1295,8 +1485,12 @@ def sync() -> dict:
     sync (which overwrites one side), current AnkiConnect builds don't fail: desktop Anki pops up an Upload/Download
     dialog and waits, and every later AnkiConnect call is stuck behind it. Only the user can choose a side, so if they
     report that dialog, tell them to press Cancel and to choose nothing until they've checked both devices. Older builds
-    raise an error with the reason instead.
+    raise an error with the reason instead. When the collection's schema changed since the last sync (a note type was
+    created or converted), it refuses before asking, because that sync can only be a full one.
     """
+    if _full_sync_pending():
+        raise AnkiError("Not synced: the note types changed since the last sync, so AnkiWeb needs a one-way full sync and a "
+                        "normal one can't happen. Nothing was sent. " + _FULL_SYNC_STEPS.split(": ", 1)[1])
     try:
         invoke("sync", timeout=120)
     except AnkiError as e:
@@ -1347,6 +1541,61 @@ def create_deck(
         invoke("createDeck", deck=name)
         log.info("created deck %s", name)
     return result
+
+
+@mcp.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=True, open_world_hint=False))
+def deck_options(
+    deck: Annotated[str, Field(description="Exact deck name from list_decks.")],
+    new_per_day: Annotated[int | None, Field(ge=0, le=9999, description="New cards per day. Omit to leave it.")] = None,
+    reviews_per_day: Annotated[int | None, Field(ge=0, le=9999, description="Maximum reviews per day. Omit to leave it.")] = None,
+    dry_run: Annotated[bool, Field(description="Default True: show what would change. Set False to save.")] = True,
+    change_shared_preset: Annotated[bool, Field(description="True only after the user agreed to change every deck in `preset_shared_with` too.")] = False,
+) -> dict:
+    """Read or change a deck's daily limits (new cards per day, reviews per day). Without new values it only reads.
+
+    The limits live in an options preset, which several decks can share: `preset_shared_with` lists the others, and
+    changing a shared preset changes them all, so that needs change_shared_preset=True after the user agreed (or they
+    give the deck its own preset in Anki's deck options first). Normal sync, no full sync.
+    Caveat: Anki's deck options screen also has per-deck 'This deck' and 'Today only' limits, which AnkiConnect can't
+    read or set, and they win over the preset. If the user sees a different limit, that's why: they clear it in Anki.
+    """
+    decks = invoke("deckNames")
+    if deck not in decks:
+        raise AnkiError(f"Deck '{deck}' does not exist. Similar: {_similar_decks(deck, set(decks)) or 'none'}. Use list_decks.")
+    cfg = invoke("getDeckConfig", deck=deck)
+    if not cfg or cfg.get("dyn"):
+        raise AnkiError(f"'{deck}' is a filtered deck: it has no options preset. Change the limits of the decks it pulls from.")
+    others = [d for d in decks if d != deck]  # one `multi` call: one getDeckConfig per deck took ~9 s for 48 decks
+    configs = invoke("multi", actions=[{"action": "getDeckConfig", "params": {"deck": d}} for d in others])
+    shared = sorted(d for d, c in zip(others, configs) if isinstance(c, dict) and not c.get("dyn") and c.get("id") == cfg["id"])
+    out: dict = {"deck": deck, "preset": cfg["name"], "new_per_day": cfg["new"]["perDay"], "reviews_per_day": cfg["rev"]["perDay"],
+                 "preset_shared_with": shared[:20], "shared_count": len(shared)}
+    wanted = {k: v for k, v in (("new_per_day", new_per_day), ("reviews_per_day", reviews_per_day)) if v is not None and v != out[k]}
+    if not wanted:
+        return out
+    out["dry_run"] = dry_run
+    changes = {k: {"old": out[k], "new": v} for k, v in wanted.items()}
+    if dry_run:
+        out["would_change"] = changes
+        out["next"] = (f"Preset '{cfg['name']}' is shared with {len(shared)} other decks: ask the user whether to change them all "
+                       "(change_shared_preset=True) or give this deck its own preset in Anki first." if shared
+                       else "Show the user the change, then call again with dry_run=False.")
+        return out
+    if shared and not change_shared_preset:
+        raise AnkiError(f"Preset '{cfg['name']}' is also used by {len(shared)} other decks ({', '.join(shared[:5])}), which would change "
+                        "too. Ask the user: pass change_shared_preset=True if they agree, or they give this deck its own preset in "
+                        "Anki's deck options first.")
+    if "new_per_day" in wanted:
+        cfg["new"]["perDay"] = wanted["new_per_day"]
+    if "reviews_per_day" in wanted:
+        cfg["rev"]["perDay"] = wanted["reviews_per_day"]
+    if not invoke("saveDeckConfig", config=cfg):
+        raise AnkiError("Anki did not save the deck options. Ask the user to check the Anki window (an open options screen can block it).")
+    log.info("deck options for %s (preset %s): %s", deck, cfg["name"], changes)
+    out.update(wanted)
+    out.update({"dry_run": False, "changed": changes, "full_sync_pending": _full_sync_pending(),
+                "note": "Saved. Sync so the phone uses the new limits."})
+    return out
 
 
 @mcp.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=True, open_world_hint=False))

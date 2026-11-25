@@ -32,7 +32,7 @@ async def main():
     async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
         await s.initialize()
         names = {t.name for t in (await s.list_tools()).tools}
-        expected = {"list_decks", "describe_deck", "search_notes", "find_similar_notes", "get_notes", "get_weak_cards", "list_note_types", "add_notes", "add_audio", "update_notes", "delete_notes", "create_deck", "move_cards", "convert_notes", "create_note_type", "suspend_cards", "export_deck", "sync", "get_deck_profile", "set_deck_profile"}
+        expected = {"list_decks", "describe_deck", "search_notes", "find_similar_notes", "get_notes", "get_weak_cards", "list_note_types", "add_notes", "add_audio", "update_notes", "delete_notes", "create_deck", "move_cards", "convert_notes", "create_note_type", "suspend_cards", "export_deck", "sync", "get_deck_profile", "set_deck_profile", "restyle_note_type", "deck_options"}
         check("all tools registered", names == expected, ", ".join(sorted(names)))
 
         decks = items(await s.call_tool("list_decks", {}))
@@ -56,6 +56,10 @@ async def main():
         check("create_note_type refuses an existing name", dup.is_error and "already exists" in dup.content[0].text)
         sus = items(await s.call_tool("suspend_cards", {"query": '"deck:Languages::SpanishRandom" is:new'}))[0]
         check("suspend_cards dry run changes nothing", sus["dry_run"] and "would_change" in sus and "changed" not in sus, f"{sus['would_change']} would change")
+        look = items(await s.call_tool("restyle_note_type", {"note_type": "Basic", "edits": [{"new": ".card { color: red; }"}]}))[0]
+        check("restyle_note_type dry run diffs without writing", look["dry_run"] and "css" in look["diff"] and "backup" not in look, f"{len(look['decks'])} decks")
+        opts = items(await s.call_tool("deck_options", {"deck": "Languages::SpanishRandom"}))[0]
+        check("deck_options reads the preset", isinstance(opts["new_per_day"], int) and opts["preset"], f"{opts['preset']}: {opts['new_per_day']} new/day, shared with {opts['shared_count']}")
         prof = items(await s.call_tool("get_deck_profile", {"deck": "Nonexistent deck"}))[0]
         check("get_deck_profile explains a missing profile", prof["profile"] is None and "describe_deck" in prof["hint"])
         by_name = {d["deck"]: d for d in decks}

@@ -37,6 +37,13 @@ class FakeAnki:
     def __init__(self):
         self.models = {k: list(v) for k, v in MODELS.items()}  # per instance: create_note_type adds to it
         self.templates = dict(TEMPLATES)
+        self.html = {m: {c: {"Front": " ".join(f"{{{{{f}}}}}" for f in sides[0]),
+                             "Back": "{{FrontSide}}<hr id=answer>" + " ".join(f"{{{{{f}}}}}" for f in sides[1])}
+                         for c, sides in cards.items()} for m, cards in TEMPLATES.items()}
+        self.css = {m: ".card { color: black; }" for m in MODELS}
+        self.deck_conf = {"Languages::Latin": 2}  # every other deck uses preset 1 (Default)
+        self.configs = {1: {"id": 1, "name": "Default", "dyn": False, "new": {"perDay": 20}, "rev": {"perDay": 200}},
+                        2: {"id": 2, "name": "Latin", "dyn": False, "new": {"perDay": 10}, "rev": {"perDay": 100}}}
         self.created_model: dict | None = None
         self.decks = ["Default", "Go", "DDIA", "DDIA::04_Transactions", "Languages", "Languages::Spanish",
                       "Languages::Latin", "Languages::_Pimsleur"]
@@ -198,7 +205,31 @@ class FakeAnki:
     def a_modelTemplates(self, modelName):
         if modelName not in self.templates:
             raise AnkiError(f"model was not found: {modelName}")
-        return {name: {"Front": "", "Back": ""} for name in self.templates[modelName]}
+        return {name: dict(sides) for name, sides in self.html[modelName].items()}
+
+    def a_modelStyling(self, modelName):
+        return {"css": self.css[modelName]}
+
+    def a_updateModelTemplates(self, model):
+        for name, sides in model["templates"].items():
+            if name not in self.html[model["name"]]:
+                raise AnkiError(f"template was not found: {name}")
+            self.html[model["name"]][name].update(sides)
+        return None
+
+    def a_updateModelStyling(self, model):
+        self.css[model["name"]] = model["css"]
+        return None
+
+    def a_getDeckConfig(self, deck):
+        return json.loads(json.dumps(self.configs[self.deck_conf.get(deck, 1)])) if deck in self.decks else False
+
+    def a_multi(self, actions):  # like AnkiConnect without a per-action version: bare results
+        return [self(a["action"], **a.get("params", {})) for a in actions]
+
+    def a_saveDeckConfig(self, config):
+        self.configs[config["id"]] = config
+        return True
 
     def a_updateNoteModel(self, note):
         """Like AnkiConnect: change the note type, set every field of the new type from `fields`, replace the tags."""
@@ -219,6 +250,8 @@ class FakeAnki:
             raise AnkiError("Model name already exists")
         self.models[modelName] = list(inOrderFields)
         self.templates[modelName] = {t["Name"]: [[], []] for t in cardTemplates}
+        self.html[modelName] = {t["Name"]: {"Front": t["Front"], "Back": t["Back"]} for t in cardTemplates}
+        self.css[modelName] = css or ""
         self.created_model = {"name": modelName, "fields": inOrderFields, "templates": cardTemplates, "css": css}
         return {"name": modelName}
 
@@ -236,6 +269,10 @@ class FakeAnki:
                 self.media[a["filename"]] = a["data"]
                 for f in a["fields"]:
                     fields[f] = fields.get(f, "") + f"[sound:{a['filename']}]"
+            for pic in note.get("picture", []):  # like AnkiConnect: store the file, append an <img> to each field
+                self.media[pic["filename"]] = pic["data"]
+                for f in pic["fields"]:
+                    fields[f] = fields.get(f, "") + f'<img src="{pic["filename"]}">'
             ids.append(None if self._check(note) else self.add(note["deckName"], note["modelName"], fields, note["tags"]))
         return ids
 
@@ -290,6 +327,7 @@ def anki(monkeypatch, tmp_path):
     monkeypatch.setenv("ANKI_MCP_PROFILES", str(tmp_path / "profiles.json"))
     monkeypatch.setenv("ANKI_MCP_HISTORY", str(tmp_path / "convert_history.jsonl"))
     monkeypatch.setenv("ANKI_MCP_BACKUP_DIR", str(tmp_path / "backups"))
+    monkeypatch.setenv("ANKI_MCP_COLLECTION", str(tmp_path / "no-collection.anki2"))  # full_sync_pending -> None unless a test makes one
     monkeypatch.setattr(server, "invoke", fake)
     monkeypatch.setattr(rag, "invoke", fake)
     # Never reach the real Redis index or load the embedding model from a unit test: tests that need them patch these.

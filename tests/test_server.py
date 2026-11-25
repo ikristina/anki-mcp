@@ -732,3 +732,133 @@ def test_suspend_cards_errors_say_what_to_do(anki):
         server.suspend_cards(" ")
     with pytest.raises(AnkiError, match="No cards match"):
         server.suspend_cards("zzzznothing")
+
+
+# --- restyle_note_type ---------------------------------------------------------------------------------------------
+
+from anki_mcp.server import ImageSpec, LookEdit, deck_options, restyle_note_type  # noqa: E402
+
+BASIC_CSS = LookEdit(old="color: black", new="color: #17181a")
+
+
+def test_list_note_types_full_shows_css_and_template_html(anki):
+    basic = next(t for t in list_note_types("Basic", full=True) if t["note_type"] == "Basic")
+    assert basic["css"] == ".card { color: black; }" and basic["template_html"]["Card 1"]["front"] == "{{Front}}"
+
+
+def test_restyle_dry_run_shows_diff_and_decks_and_writes_nothing(anki):
+    out = restyle_note_type("Basic", [BASIC_CSS, LookEdit(card="Card 1", side="front", new='<div class="q">{{Front}}</div>')])
+    assert out["dry_run"] and "+.card { color: #17181a; }" in out["diff"]["css"] and "Card 1 front" in out["diff"]
+    assert out["decks"] == {"Languages::_Pimsleur": 1}
+    assert anki.css["Basic"] == ".card { color: black; }" and "updateModelStyling" not in anki.calls
+
+
+def test_restyle_writes_after_a_backup(anki, tmp_path):
+    out = restyle_note_type("Basic", [BASIC_CSS, LookEdit(card="Card 1", side="back", old="<hr id=answer>", new="<hr id=answer><b>A</b>")], dry_run=False)
+    assert anki.css["Basic"] == ".card { color: #17181a; }" and "<b>A</b>" in anki.html["Basic"]["Card 1"]["Back"]
+    saved = json.loads(Path(out["backup"]).read_text())
+    assert saved["css"] == ".card { color: black; }" and saved["templates"]["Card 1"]["Back"] == "{{FrontSide}}<hr id=answer>{{Back}}"
+
+
+@pytest.mark.parametrize("edit, msg", [
+    (LookEdit(old="nope", new="x"), "occurs 0 times"),
+    (LookEdit(card="Card 1", side="front", new="{{Nope}}"), "unknown placeholders"),
+    (LookEdit(card="Card 1", side="front", new="no fields here"), "blank"),
+    (LookEdit(card="Card 9", side="front", new="{{Front}}"), "no card 'Card 9'"),
+    (LookEdit(card="Card 1", new="{{Front}}"), "side='front' or 'back'"),
+    (LookEdit(old="color: black", new="color: black"), "change nothing"),
+])
+def test_restyle_refuses_bad_edits_before_writing(anki, edit, msg):
+    with pytest.raises(AnkiError, match=msg):
+        restyle_note_type("Basic", [edit], dry_run=False)
+    assert "updateModelStyling" not in anki.calls and "updateModelTemplates" not in anki.calls
+
+
+def test_restyle_refuses_yanki_note_types(anki):
+    with pytest.raises(AnkiError, match="Yanki"):
+        restyle_note_type("Yanki - Basic", [BASIC_CSS])
+
+
+# --- full_sync_pending -------------------------------------------------------------------------------------------
+
+import json  # noqa: E402
+import sqlite3  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+
+def _collection(monkeypatch, tmp_path, scm, ls):
+    db = tmp_path / f"collection-{scm}-{ls}.anki2"
+    con = sqlite3.connect(db)
+    con.execute("create table col (scm integer, ls integer)")
+    con.execute("insert into col values (?, ?)", (scm, ls))
+    con.commit()
+    con.close()
+    monkeypatch.setenv("ANKI_MCP_COLLECTION", str(db))
+
+
+def test_full_sync_pending_reads_the_collection(anki, monkeypatch, tmp_path):
+    assert server._full_sync_pending() is None  # the fixture points at a missing file
+    _collection(monkeypatch, tmp_path, scm=2, ls=1)
+    assert server._full_sync_pending() is True
+    _collection(monkeypatch, tmp_path, scm=1, ls=2)
+    assert server._full_sync_pending() is False
+
+
+def test_sync_refuses_when_the_schema_changed_since_last_sync(anki, monkeypatch, tmp_path):
+    _collection(monkeypatch, tmp_path, scm=2, ls=1)
+    with pytest.raises(AnkiError, match="full sync"):
+        sync()
+    assert "sync" not in anki.calls
+
+
+# --- deck_options ------------------------------------------------------------------------------------------------
+
+def test_deck_options_reads_and_lists_decks_sharing_the_preset(anki):
+    out = deck_options("Languages::Spanish")
+    assert out["preset"] == "Default" and out["new_per_day"] == 20 and "Go" in out["preset_shared_with"] and "dry_run" not in out
+
+
+def test_deck_options_shared_preset_needs_agreement(anki):
+    assert "shared with" in deck_options("Languages::Spanish", new_per_day=5)["next"]
+    with pytest.raises(AnkiError, match="change_shared_preset=True"):
+        deck_options("Languages::Spanish", new_per_day=5, dry_run=False)
+    assert anki.configs[1]["new"]["perDay"] == 20
+    deck_options("Languages::Spanish", new_per_day=5, dry_run=False, change_shared_preset=True)
+    assert anki.configs[1]["new"]["perDay"] == 5
+
+
+def test_deck_options_changes_an_own_preset(anki):
+    out = deck_options("Languages::Latin", reviews_per_day=50, dry_run=False)
+    assert out["changed"] == {"reviews_per_day": {"old": 100, "new": 50}} and anki.configs[2]["rev"]["perDay"] == 50
+    assert anki.configs[2]["new"]["perDay"] == 10
+
+
+# --- images ------------------------------------------------------------------------------------------------------
+
+def _png(tmp_path):
+    p = tmp_path / "cat.png"
+    p.write_bytes(b"\x89PNG fake")
+    return str(p)
+
+
+def test_add_notes_attaches_an_image(anki, tmp_path):
+    note = NoteInput(deck="Default", fields={"Front": "gato", "Back": "cat"}, image=ImageSpec(field="Back", path=_png(tmp_path)))
+    nid = add_notes([note])["results"][0]["note_id"]
+    back = anki.notes[nid]["fields"]["Back"]
+    name = back.split('src="')[1].split('"')[0]
+    assert back.startswith("cat<img src=") and name.startswith("anki-mcp-") and name in anki.media
+
+
+@pytest.mark.parametrize("path, msg", [("/tmp/x.pdf", "absolute path to a"), ("/nonexistent/x.png", "does not exist")])
+def test_add_notes_rejects_bad_images(anki, path, msg):
+    note = NoteInput(deck="Default", fields={"Front": "q", "Back": "a"}, image=ImageSpec(field="Back", path=path))
+    assert msg in add_notes([note], dry_run=True)["results"][0]["error"]
+
+
+def test_update_notes_appends_an_image_once(anki, tmp_path):
+    nid = next(i for i, n in anki.notes.items() if n["fields"].get("Front") == "Socius")
+    upd = NoteUpdate(note_id=nid, image=ImageSpec(field="Back", path=_png(tmp_path)))
+    assert update_notes([upd])["results"][0]["status"] == "would_update" and not anki.media
+    update_notes([upd], dry_run=False)
+    assert "<img src=" in anki.notes[nid]["fields"]["Back"] and len(anki.media) == 1
+    assert update_notes([upd])["results"][0]["status"] == "unchanged"

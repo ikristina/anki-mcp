@@ -55,10 +55,19 @@ use Write/Edit for cards: the vault is not the working directory, so a file writ
 
 - One `add_notes` call for the whole batch; run with `dry_run: true` first when deck or fields are uncertain.
 - Default note type `Basic` (`Front`/`Back`). For other note types, check fields via `search_notes` on the deck.
+- A picture helps (a diagram, a face, a place): put it in a field with the note's `image` (`{"field": ..., "path": <absolute local file>}`).
 
 ## 4. Card quality (both paths)
 
-- One fact or decision per card; the question must be answerable without seeing the source.
+Based on Woźniak's "Twenty rules of formulating knowledge":
+- Understand first, then memorize: don't card something the user can't yet explain, and card the basics before details.
+- One fact or decision per card (minimum information); the question must be answerable without seeing the source.
+- No lists or sets on one card ("name the 5 …"): one card per item, or a cloze per item in a sentence that gives them an order.
+- Cloze deletion turns a sentence or definition into a card quickly; keep each gap short.
+- Similar items get mixed up (interference): add the context that tells them apart (the "when/why not" next to the "what").
+- Word it as short as it can be while still unambiguous; tie it to the user's own context or example where one exists.
+- Redundancy is fine: asking the same fact from two directions is useful.
+- Facts that change or are disputed get a source and date (`(Redis 8, 2025)`).
 - Technical claims (numbers, defaults, complexity, "X does Y") must be verified — use the
   `verified-flashcards` skill's discipline when it is available.
 - Show the user the cards (or file list) you created and where they went.

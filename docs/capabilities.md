@@ -2,7 +2,7 @@
 
 A plain-language map of what this server lets an agent do with your Anki collection, what it can't do yet, and what the design vocabulary means. **Whoever adds a capability updates this file in the same change.** Tool details are in the README table; this page is for "what's possible?".
 
-Last updated: 2026-11-25 (Index restyle: subdeck tag, phone fit).
+Last updated: 2026-11-25 (`restyle_note_type`, `deck_options`, images, `full_sync_pending`; Index restyle: subdeck tag, phone fit).
 
 ## Things you can say
 
@@ -14,6 +14,9 @@ Last updated: 2026-11-25 (Index restyle: subdeck tag, phone fit).
 | "Fix / reword these cards", "add a tag" | Edits fields and tags, shows an old → new diff first | `update_notes` |
 | "Voice the cards that have no audio" | Backfills pronunciation on existing notes | `add_audio` |
 | "Make a new note type: these fields, these card types, this look" | Creates it from a design (see `examples/note_types/english-vocab.json`); needs a full sync afterwards | `create_note_type` |
+| "Make deck X's cards dark / bigger / move the audio button" | Patches the note type's CSS or card HTML; shows a diff and which decks share the look; backs up the old one. Normal sync | `list_note_types(full=True)`, `restyle_note_type` |
+| "Show me 10 new cards a day in deck X" | Reads or sets new cards/day and reviews/day; warns when other decks share the same options preset | `deck_options` |
+| "Add this picture to the card" | Attaches a local image file to a field of a new or existing note | `add_notes`, `update_notes` (`image`) |
 | "Stop showing me new cards in deck X" / "pause deck X" | Suspends the deck's never-studied cards (`is:new`) or all its cards; undo restores them, gradually if you like | `suspend_cards` |
 | "Make a new deck called …" | Creates an empty deck (and parents), warns about similar names | `create_deck` |
 | "Move these cards to deck Y" | Moves cards by search, keeps history; dry run first | `move_cards` |
@@ -24,7 +27,7 @@ Last updated: 2026-11-25 (Index restyle: subdeck tag, phone fit).
 | "What does deck X look like?" | Note types, fields, audio, tag patterns, samples | `describe_deck`, `list_note_types` |
 | "Remember how this deck works" | Saves conventions (voice, field rules, tags, and whether duplicate checks look at the whole collection or only that deck: `similar_scope`) for next time | `set_deck_profile` |
 
-Safety defaults: writes are dry runs first, everything added is tagged `mcp-added` (edited: `mcp-edited`, converted: `mcp-converted`), decks synced from Obsidian (Yanki) are never written to.
+Safety defaults: tools that change note types report `full_sync_pending` (read from the collection file), and `sync` refuses while one is pending. Writes are dry runs first, everything added is tagged `mcp-added` (edited: `mcp-edited`, converted: `mcp-converted`), decks synced from Obsidian (Yanki) are never written to.
 
 ## Worked example: the English deck
 
@@ -32,13 +35,13 @@ Safety defaults: writes are dry runs first, everything added is tagged `mcp-adde
 
 ## Restyling an existing note type
 
-The look of an existing type (CSS and template layout) can be changed without a full sync, but it applies to every deck that uses the type. There is no tool yet; it was done once with a script (`examples/note_types/basic-reversed-index-style.py`) after saving the old version to `~/.config/anki-mcp/backups/`. Pimsleur 1 and 2, SpanishRandom and Latin now use the Index look. Each card shows its subdeck name (`{{Subdeck}}`) in the tag line instead of "Card · Front". Run `sync` right after a restyle, or the phone won't see it.
+The look of an existing type (CSS and template layout) can be changed without a full sync, but it applies to every deck that uses the type. `restyle_note_type` does it, and saves the old look to `~/.config/anki-mcp/backups/` first. The first restyle was done with a script (`examples/note_types/basic-reversed-index-style.py`): Pimsleur 1 and 2, SpanishRandom and Latin use that Index look. Each card shows its subdeck name (`{{Subdeck}}`) in the tag line instead of "Card · Front". Run `sync` right after a restyle, or the phone won't see it.
 
 ## Not possible yet
 
-- **Editing an existing note type** (add a field, change a template or its styling). New types can be created (`create_note_type`); changing one that has notes is a riskier schema change and isn't wrapped. `create_deck` only makes the empty container; what its cards contain comes from the note type.
-- **Deck options**: new cards per day, review limits, learning steps. Anki's deck-options screen only; AnkiConnect can't change them.
-- **Image cards and occlusion**: adding images to notes isn't wired up (audio is).
+- **Changing a note type's structure** (add, remove or rename a field or card). That's a schema change with a full sync; only the look (`restyle_note_type`) and new types (`create_note_type`) are wrapped. `create_deck` only makes the empty container; what its cards contain comes from the note type.
+- **Other deck options**: learning steps, FSRS, per-deck "This deck"/"Today only" limits. Only the preset's new/review limits are wrapped (`deck_options`).
+- **Images from a URL, and image occlusion**: images come from a local file only.
 - **Renaming or deleting decks**, merging decks.
 - **Full syncs**: deliberately refused; you do those by hand in Anki.
 - **Working when Anki is closed**: everything goes through the Anki desktop app (AnkiConnect).
@@ -64,6 +67,7 @@ Pick these when asking for a new deck. Each one maps to note type fields and car
 ## Where things live
 
 - Saved deck conventions: `~/.config/anki-mcp/profiles.json`
+- Old note type looks: `~/.config/anki-mcp/backups/<type>-look-<time>.json`
 - Backups before conversions: `~/.config/anki-mcp/backups/` (`ANKI_MCP_BACKUP_DIR`), log in `convert_history.jsonl`
 - Semantic index: Redis container `anki-redis` (needs `colima start` after a reboot), rebuilt with `uv run --extra rag anki-mcp-index`
 - Observability: Grafana container `otel-lgtm` (http://localhost:3000)
